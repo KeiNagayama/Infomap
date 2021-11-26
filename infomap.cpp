@@ -208,7 +208,7 @@ double entropy(vector<double> &ps, double EPS = 1e-16)
 	double h = 0;
 	for (auto &p : ps)
 	{
-		h -= plogp(p, EPS);
+		h += plogp(p, EPS);
 	}
 	return h;
 }
@@ -309,11 +309,26 @@ CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &p
 		// qs[i] = tau * qi_tel + (1 - tau) * qi_adj;
 		ps[i] = qs[i] + sum(pr_i);
 	}
+	cout << "===================================" << endl;
+	cout << "test for get code length" << endl;
+	cout << "===================================" << endl;
 	double q = sum(qs);
 	double EPS = 1e-16;
+	int precision = 4;
+	cout << "  pr = ";
+	print_vector(pagerank, '\n', precision);
+	cout << "  qs = ";
+	print_vector(qs, '\n', precision);
+	cout << "  ps = ";
+	print_vector(ps, '\n', precision);
+	cout << "H(Q) = " << entropy(qs, EPS) << endl;
+	cout << "H(P) = " << entropy(ps, EPS) << endl;
+	cout << "H(q) = " << plogp(q) << endl;
+	cout << "H(PR) = " << entropy(pagerank, EPS) << endl;
+	cout << "===================================" << endl;
 	double L = 2 * entropy(qs, EPS) - entropy(ps, EPS) - plogp(q, EPS) + entropy(pagerank, EPS);
 
-	return CodeLength(-L, q, qs, ps);
+	return CodeLength(L, q, qs, ps);
 }
 
 struct Community
@@ -461,10 +476,10 @@ pair<double, CodeLength> get_delta_L(Community &C, int alpha_0, int i_id, int j_
 	double delta_pi = delta_qi - p_alpha_0;
 	double delta_pj = delta_qj + p_alpha_0;
 
-	cout << "delta_qi = " << delta_qi << endl;
-	cout << "delta_qj = " << delta_qj << endl;
-	cout << "delta_pi = " << delta_pi << endl;
-	cout << "delta_pj = " << delta_pj << endl;
+	// cout << "delta_qi = " << delta_qi << endl;
+	// cout << "delta_qj = " << delta_qj << endl;
+	// cout << "delta_pi = " << delta_pi << endl;
+	// cout << "delta_pj = " << delta_pj << endl;
 
 	// delta_L
 	double qi2 = qi + delta_qi;
@@ -483,7 +498,7 @@ pair<double, CodeLength> get_delta_L(Community &C, int alpha_0, int i_id, int j_
 		qj2 = 0;
 	}
 
-	double delta_L = 2 * (delta_plogp(qi, qi2) + delta_plogp(qj, qj2)) - (delta_plogp(pi, pi2) + delta_plogp(pj, pj2)) - (delta_plogp(q, q2));
+	double delta_L = 2 * (delta_plogp(qi, qi2) + delta_plogp(qj, qj2)) - (delta_plogp(pi, pi2) + delta_plogp(pj, pj2)) - delta_plogp(q, q2);
 	// update CodeLength
 	code.L_ += delta_L;
 	code.q_ = q2;
@@ -835,106 +850,106 @@ void test_3()
 	print_vector(C1.code_.ps_, '\n', precision);
 	// test delta L
 	double L1 = C1.code_.L_;
-	// double dL2_ = get_delta_L(C1, 0, 0, 1).first;
-	// double L2_ = get_delta_L(C1, 0, 0, 1).second.L_;
+	double dL2_ = get_delta_L(C1, 0, 0, 1).first;
+	double L2_ = get_delta_L(C1, 0, 0, 1).second.L_;
 	cout << "  L  = " << L1 << endl;
-	// cout << "  L2_  = " << L2_ << endl;
-	// cout << "  dL2_  = " << dL2_ << endl;
+	cout << "  L2_  = " << L2_ << endl;
+	cout << "  dL2_  = " << dL2_ << endl;
 	cout << "  test for get_delta_L >>";
 	assert(L1 == L1_);
-	// assert(L2_ == L1 + dL2_);
+	assert(L2_ == L1 + dL2_);
 	cout << "\e[0;32m passed!! \e[0m" << endl;
 
-	// // community 2: moved node 0 from module 0 to 1
-	// cout << "========================================" << endl;
-	// vector<vector<int>> community2 = {{0, 1, 2}};
-	// cout << "[info]" << endl;
-	// cout << "  community2: ";
-	// print_community(community2, '\n');
-	// Community C2 = Community(N, adj_flows, tau, community2);
-	// cout << "  pr = ";
-	// print_vector(C2.pagerank_, '\n');
-	// cout << "  qs = ";
-	// print_vector(C2.code_.qs_, '\n');
-	// cout << "  ps = ";
-	// print_vector(C2.code_.ps_, '\n');
-	// // test delta L
-	// double L2 = C2.code_.L_;
-	// cout << "  L  = " << L2 << endl;
-	// cout << "  test for get_delta_L >>";
-	// assert(L2 == L2_);
-	// cout << "\e[0;32m passed!! \e[0m" << endl;
+	// community 2: moved node 0 from module 0 to 1
+	cout << "========================================" << endl;
+	vector<vector<int>> community2 = {{0, 1, 2}};
+	cout << "[info]" << endl;
+	cout << "  community2: ";
+	print_community(community2, '\n');
+	Community C2 = Community(N, adj_flows, tau, community2);
+	cout << "  pr = ";
+	print_vector(C2.pagerank_, '\n');
+	cout << "  qs = ";
+	print_vector(C2.code_.qs_, '\n');
+	cout << "  ps = ";
+	print_vector(C2.code_.ps_, '\n');
+	// test delta L
+	double L2 = C2.code_.L_;
+	cout << "  L  = " << L2 << endl;
+	cout << "  test for get_delta_L >>";
+	assert(L2 == L2_);
+	cout << "\e[0;32m passed!! \e[0m" << endl;
 
-	// // ==========================================================
-	// // test for optimal target module
-	// // ==========================================================
-	// cout << "========================================" << endl;
-	// cout << "test for optimal target module" << endl;
+	// ==========================================================
+	// test for optimal target module
+	// ==========================================================
+	cout << "========================================" << endl;
+	cout << "test for optimal target module" << endl;
 
-	// // move 1 in C0
-	// cout << "========================================" << endl;
-	// cout << "[info]" << endl;
-	// int alpha0 = 1;
-	// tuple<int, double, CodeLength> target0 = get_optimal_target_module(C0, alpha0);
-	// int j0 = get<0>(target0);
-	// printf("  move %d to module %d\n", alpha0, j0);
-	// cout << "  test for target module >>";
-	// assert(j0 != 1);
-	// cout << "\e[0;32m passed!! \e[0m" << endl;
+	// move 1 in C0
+	cout << "========================================" << endl;
+	cout << "[info]" << endl;
+	int alpha0 = 1;
+	tuple<int, double, CodeLength> target0 = get_optimal_target_module(C0, alpha0);
+	int j0 = get<0>(target0);
+	printf("  move %d to module %d\n", alpha0, j0);
+	cout << "  test for target module >>";
+	assert(j0 != 1);
+	cout << "\e[0;32m passed!! \e[0m" << endl;
 
-	// // move 0 in C1
-	// cout << "========================================" << endl;
-	// cout << "[info]" << endl;
-	// int alpha1 = 0;
-	// tuple<int, double, CodeLength> target1 = get_optimal_target_module(C0, alpha1);
-	// int j1 = get<0>(target1);
-	// printf("  move %d to module %d\n", alpha1, j1);
-	// cout << "  test for target module >>";
-	// assert(j1 == 1);
-	// cout << "\e[0;32m passed!! \e[0m" << endl;
+	// move 0 in C1
+	cout << "========================================" << endl;
+	cout << "[info]" << endl;
+	int alpha1 = 0;
+	tuple<int, double, CodeLength> target1 = get_optimal_target_module(C0, alpha1);
+	int j1 = get<0>(target1);
+	printf("  move %d to module %d\n", alpha1, j1);
+	cout << "  test for target module >>";
+	assert(j1 == 1);
+	cout << "\e[0;32m passed!! \e[0m" << endl;
 
-	// // ==========================================================
-	// // test for update community
-	// // ==========================================================
-	// cout << "========================================" << endl;
-	// cout << "test for update community" << endl;
+	// ==========================================================
+	// test for update community
+	// ==========================================================
+	cout << "========================================" << endl;
+	cout << "test for update community" << endl;
 
-	// // udpate after "move 1 in C0"
-	// cout << "========================================" << endl;
-	// cout << "[info]" << endl;
-	// printf("  move %d to module %d\n", alpha0, 2);
-	// vector<vector<int>> c0 = C0.community_;
-	// vector<int> n2c0 = C0.n2c_;
-	// update_community(c0, n2c0, alpha0, 2);
-	// cout << "  test for update community >>";
-	// assert(c0[0].size() == 1);
-	// assert(c0[1].size() == 0);
-	// assert(c0[2].size() == 2);
-	// cout << "\e[0;32m passed!! \e[0m" << endl;
+	// udpate after "move 1 in C0"
+	cout << "========================================" << endl;
+	cout << "[info]" << endl;
+	printf("  move %d to module %d\n", alpha0, 2);
+	vector<vector<int>> c0 = C0.community_;
+	vector<int> n2c0 = C0.n2c_;
+	update_community(c0, n2c0, alpha0, 2);
+	cout << "  test for update community >>";
+	assert(c0[0].size() == 1);
+	assert(c0[1].size() == 0);
+	assert(c0[2].size() == 2);
+	cout << "\e[0;32m passed!! \e[0m" << endl;
 
-	// // udpate after "move 0 in C1"
-	// cout << "========================================" << endl;
-	// cout << "[info]" << endl;
-	// printf("  move %d to module %d\n", alpha1, 1);
-	// vector<vector<int>> c1 = C1.community_;
-	// vector<int> n2c1 = C1.n2c_;
-	// update_community(c1, n2c1, alpha1, 1);
-	// cout << "  test for update community >>";
-	// assert(c1[1].size() == 3);
-	// cout << "\e[0;32m passed!! \e[0m" << endl;
+	// udpate after "move 0 in C1"
+	cout << "========================================" << endl;
+	cout << "[info]" << endl;
+	printf("  move %d to module %d\n", alpha1, 1);
+	vector<vector<int>> c1 = C1.community_;
+	vector<int> n2c1 = C1.n2c_;
+	update_community(c1, n2c1, alpha1, 1);
+	cout << "  test for update community >>";
+	assert(c1[1].size() == 3);
+	cout << "\e[0;32m passed!! \e[0m" << endl;
 
-	// // ==========================================================
-	// // test for get optimal community
-	// // ==========================================================
-	// cout << "========================================" << endl;
-	// cout << "test for get optimal community" << endl;
+	// ==========================================================
+	// test for get optimal community
+	// ==========================================================
+	cout << "========================================" << endl;
+	cout << "test for get optimal community" << endl;
 
-	// // get optimal community
-	// cout << "========================================" << endl;
-	// cout << "[info]" << endl;
-	// Community opt_C = get_optimal_community(C0);
-	// cout << "\e[0;32m  detected community = \e[0m";
-	// print_community(opt_C.community_, '\n');
+	// get optimal community
+	cout << "========================================" << endl;
+	cout << "[info]" << endl;
+	Community opt_C = get_optimal_community(C0);
+	cout << "\e[0;32m  detected community = \e[0m";
+	print_community(opt_C.community_, '\n');
 }
 
 void test_4()
@@ -1166,13 +1181,53 @@ void test_entropy()
 	cout << "\e[0;32m passed!! \e[0m" << endl;
 }
 
+void test_plogp()
+{
+	double x1 = plogp(0.5);
+	cout << x1 << " " << log(2) / 2 << endl;
+	double d1 = delta_plogp(0.5, 0.25);
+	cout << d1 << endl;
+}
+
+void test_L()
+{
+	double q0 = 0.2182;
+	double q1 = 0.2068;
+	double p0 = 0.4750;
+	double p1 = 0.9500;
+	double q = q0 + q1;
+	double pa0 = 0.2565;
+	double pa1 = 0.4865;
+	double pa2 = 0.2565;
+	double L = 2 * (plogp(q0) + plogp(q1)) - (plogp(p0) + plogp(p1)) - plogp(q) + (plogp(pa0) + plogp(pa1) + plogp(pa2));
+	cout << L << endl;
+
+	// vector<double> pr = {0.2568, 0.4865, 0.2568};
+	// vector<double> qs = {0.2182, 0.4135, 0.2182};
+	// vector<double> ps = {0.4750, 0.9000, 0.4750};
+
+	vector<double> pr = {0.2565, 0.4865, 0.2565};
+	vector<double> qs = {0.2182, 0.2068};
+	vector<double> ps = {0.4750, 0.9500};
+
+	double L2 = 2 * entropy(qs) - entropy(ps) - plogp(sum(qs)) + entropy(pr);
+	cout << L2 << endl;
+
+	cout << "qs: " << plogp(q0) + plogp(q1) << " " << entropy(qs) << endl;
+	cout << "ps: " << plogp(p0) + plogp(p1) << " " << entropy(ps) << endl;
+	cout << "q: " << plogp(q) << " " << plogp(sum(qs)) << endl;
+	cout << "pr: " << plogp(pa0) + plogp(pa1) + plogp(pa2) << " " << entropy(pr) << endl;
+}
+
 int main(int argc, char *argv[])
 {
-	test_3(); // all test passed!! (for one-layer search)
+	// test_L();
+	// test_3(); // all test passed!! (for one-layer search)
 	// test_4();
 	// test_27();
 	// test_97();
-	// test_lfr();
+	test_lfr();
 	// test_entropy();
+	// test_plogp();
 	return 0;
 }
