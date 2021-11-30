@@ -295,7 +295,7 @@ CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &p
 	{
 		int Ni = community[i].size();
 		vector<double> pr_i = slice_vector_by_indices(pagerank, community[i]);
-		// double qi_tel = sum(pr_i) * (N - Ni) / N;
+		double qi_tel = sum(pr_i) * (N - Ni) / N;
 		double qi_adj = 0;
 		for (auto &alpha : community[i])
 		{
@@ -309,23 +309,23 @@ CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &p
 		// qs[i] = tau * qi_tel + (1 - tau) * qi_adj;
 		ps[i] = qs[i] + sum(pr_i);
 	}
-	cout << "===================================" << endl;
-	cout << "test for get code length" << endl;
-	cout << "===================================" << endl;
+	// cout << "===================================" << endl;
+	// cout << "test for get code length" << endl;
+	// cout << "===================================" << endl;
 	double q = sum(qs);
 	double EPS = 1e-16;
 	int precision = 4;
-	cout << "  pr = ";
-	print_vector(pagerank, '\n', precision);
-	cout << "  qs = ";
-	print_vector(qs, '\n', precision);
-	cout << "  ps = ";
-	print_vector(ps, '\n', precision);
-	cout << "H(Q) = " << entropy(qs, EPS) << endl;
-	cout << "H(P) = " << entropy(ps, EPS) << endl;
-	cout << "H(q) = " << plogp(q) << endl;
-	cout << "H(PR) = " << entropy(pagerank, EPS) << endl;
-	cout << "===================================" << endl;
+	// cout << "  pr = ";
+	// print_vector(pagerank, '\n', precision);
+	// cout << "  qs = ";
+	// print_vector(qs, '\n', precision);
+	// cout << "  ps = ";
+	// print_vector(ps, '\n', precision);
+	// cout << "H(Q) = " << entropy(qs, EPS) << endl;
+	// cout << "H(P) = " << entropy(ps, EPS) << endl;
+	// cout << "H(q) = " << plogp(q) << endl;
+	// cout << "H(PR) = " << entropy(pagerank, EPS) << endl;
+	// cout << "===================================" << endl;
 	double L = 2 * entropy(qs, EPS) - entropy(ps, EPS) - plogp(q, EPS) + entropy(pagerank, EPS);
 
 	return CodeLength(L, q, qs, ps);
@@ -1029,44 +1029,46 @@ void test_27()
 	vector<Link> links = read_links(graph_name);
 	int N = get_N(links);
 	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
-	double tau = 0.15;
+	double tau = 0;
 
-	for (int seed = 0; seed < 10; seed++)
-	{
-		cout << "seed = " << seed << ", ";
-		vector<vector<int>> init_community(N);
-		for (int i = 0; i < N; i++)
-		{
-			init_community[i] = {i};
-		}
+	// for (int seed = 0; seed < 10; seed++)
+	// {
+	// 	cout << "seed = " << seed << ", ";
+	// 	vector<vector<int>> init_community(N);
+	// 	for (int i = 0; i < N; i++)
+	// 	{
+	// 		init_community[i] = {i};
+	// 	}
 
-		Community C = Community(N, adj_flows, tau, init_community);
+	// 	Community C = Community(N, adj_flows, tau, init_community);
 
-		// ==========================================================
-		// test for get optimal community
-		// ==========================================================
-		// cout << "========================================" << endl;
-		// cout << "test for get optimal community" << endl;
+	// 	// ==========================================================
+	// 	// test for get optimal community
+	// 	// ==========================================================
+	// 	// cout << "========================================" << endl;
+	// 	// cout << "test for get optimal community" << endl;
 
-		// get optimal community
-		// cout << "========================================" << endl;
-		// cout << "[info]" << endl;
-		Community opt_C = get_optimal_community(C, seed);
-		printf(", L = %1.3f\n", -opt_C.code_.L_ / log(2));
-		// cout << "\e[0;32m  detected community = \e[0m";
-		// print_community(opt_C.community_, '\n');
-	}
+	// 	// get optimal community
+	// 	// cout << "========================================" << endl;
+	// 	// cout << "[info]" << endl;
+	// 	Community opt_C = get_optimal_community(C, seed);
+	// 	printf(", L = %1.3f\n", -opt_C.code_.L_ / log(2));
+	// 	// cout << "\e[0;32m  detected community = \e[0m";
+	// 	// print_community(opt_C.community_, '\n');
+	// }
 
-	vector<vector<int>> community = {{0, 1, 2, 3, 4, 5, 6, 7, 8},
-									 {9, 10, 11},
-									 {15, 16, 17},
-									 {18, 19, 20},
-									 {21, 22, 23},
-									 {12, 13, 14},
-									 {24, 25, 26}};
+	// Fig.1-A
+	vector<vector<int>> community = {{0, 1, 2}, {3, 4, 5}, {6, 7, 8}, {9, 10, 11}, {15, 16, 17}, {18, 19, 20}, {21, 22, 23}, {12, 13, 14}, {24, 25, 26}};
 	Community C = Community(N, adj_flows, tau, community);
+	int precision = 4;
+	cout << "pagerank = ";
+	print_vector(C.pagerank_, '\n', precision);
+	cout << "qs = ";
+	print_vector(C.code_.qs_, '\n', precision);
+	cout << "ps = ";
+	print_vector(C.code_.ps_, '\n', precision);
 	cout << "n2c = ";
-	print_vector(C.n2c_);
+	print_vector(C.n2c_, '\n', precision);
 	printf(", L = %1.3f\n", -C.code_.L_ / log(2));
 }
 
@@ -1224,9 +1226,9 @@ int main(int argc, char *argv[])
 	// test_L();
 	// test_3(); // all test passed!! (for one-layer search)
 	// test_4();
-	// test_27();
+	test_27();
 	// test_97();
-	test_lfr();
+	// test_lfr();
 	// test_entropy();
 	// test_plogp();
 	return 0;
