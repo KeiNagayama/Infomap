@@ -213,16 +213,96 @@ double entropy(vector<double> &ps, double EPS = 1e-16)
 	return h;
 }
 
+vector<int> get_dangling_nodes(vector<double> &total_outflow)
+{
+	vector<int> dangling_nodes;
+	double EPS = 1e-16;
+	for (int i = 0; i < total_outflow.size(); i++)
+	{
+		if (total_outflow[i] < EPS)
+			dangling_nodes.push_back(i);
+	}
+	return dangling_nodes;
+}
+
+double get_dangling_sum(vector<double> &v, vector<int> &dangling_nodes)
+{
+	double s = 0;
+	for (auto &i : dangling_nodes)
+	{
+		s += v[i];
+	}
+	return s;
+}
+
+struct FlowSet
+{
+	vector<vector<Flow>> adj_outflows_;
+	vector<vector<Flow>> adj_inflows_;
+	vector<vector<Flow>> nadj_outflows_;
+	vector<vector<Flow>> nadj_inflows_;
+	vector<int> dangling_nodes_;
+	// construtor
+	FlowSet(
+		vector<vector<Flow>> &adj_outflows,
+		vector<vector<Flow>> &adj_inflows,
+		vector<vector<Flow>> &nadj_outflows,
+		vector<vector<Flow>> &nadj_inflows,
+		vector<int> &dangling_nodes) : adj_outflows_(adj_outflows), adj_inflows_(adj_inflows), nadj_outflows_(nadj_outflows), nadj_inflows_(nadj_inflows), dangling_nodes_(dangling_nodes){};
+};
+
+// weighted total_outflows
+FlowSet get_flowset(vector<Link> &links, int N)
+{
+	vector<double> total_outflows(N, 0);
+	vector<vector<Flow>> adj_outflows(N);
+	vector<vector<Flow>> adj_inflows(N);
+	for (auto &link : links)
+	{
+		int i = get<0>(link);
+		int j = get<1>(link);
+		double w = get<2>(link);
+		total_outflows[i] += w;
+		adj_outflows[i].push_back(make_pair(j, w));
+		adj_inflows[j].push_back(make_pair(i, w));
+	}
+	// normalize outflows by total outflows
+	vector<vector<Flow>> nadj_outflows = adj_outflows;
+	for (int i = 0; i < N; i++)
+	{
+		double s = total_outflows[i];
+		for (auto &outflow : nadj_outflows[i])
+		{
+			outflow.second /= s;
+		}
+	}
+	// normalize inflows by total outflows
+	vector<vector<Flow>> nadj_inflows = adj_inflows;
+	for (int j = 0; j < N; j++)
+	{
+		for (auto &inflow : nadj_inflows[j])
+		{
+			int i = inflow.first;
+			double s = total_outflows[i];
+			inflow.second /= s;
+		}
+	}
+	vector<int> dangling_nodes = get_dangling_nodes(total_outflows);
+	return FlowSet(adj_outflows, adj_inflows, nadj_outflows, nadj_inflows, dangling_nodes);
+}
+
 // to calculate pagerank
-vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, double tau = 0.15, int T = 100000, double EPS = 1e-16)
+vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, vector<int> &dangling_nodes, double tau = 0.15, int T = 100000, double EPS = 1e-6)
 {
 	// initialization
 	vector<double> pagerank(N, 1.0 / N);
-	vector<double> pagerank_tmp(N, 1.0 / N);
+	vector<double> pagerank_last(N, 1.0 / N);
+
+	cout << "dangling nodes: " << dangling_nodes.size() << endl;
 
 	// iteration by power method
 	int t = 0;
-	while (t++ < T)
+	for (int t = 0; t < T; t++)
 	{
 		for (int j = 0; j < N; j++)
 		{
@@ -231,11 +311,12 @@ vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, double ta
 			{
 				int i = flow.first;
 				double w = flow.second;
-				x += w * pagerank[i];
+				x += w * pagerank_last[i];
 			}
-			pagerank_tmp[j] = tau / N + (1.0 - tau) * x;
+			double dangling_sum = get_dangling_sum(pagerank_last, dangling_nodes);
+			pagerank[j] = tau / N + (1.0 - tau) / N * dangling_sum + (1.0 - tau) * x;
 		}
-		if (l1_norm(pagerank, pagerank_tmp) < EPS)
+		if (l1_norm(pagerank, pagerank_last) < EPS)
 		{
 			// damp one step (without teleportation)
 			for (int j = 0; j < N; j++)
@@ -245,17 +326,63 @@ vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, double ta
 				{
 					int i = flow.first;
 					double w = flow.second;
-					x += w * pagerank_tmp[i];
+					x += w * pagerank_last[i];
 				}
 				pagerank[j] = (1.0 - tau) * x;
 			}
 			DivideVectorByScaler(pagerank, sum(pagerank));
-			break;
+			cout << "total steps to converge: " << t << endl;
+			return pagerank;
 		}
-		pagerank = pagerank_tmp;
+		pagerank_last = pagerank;
 	}
+	cout << "total steps to converge: " << T << " (not converged)" << endl;
 	return pagerank;
 }
+
+// // to calculate pagerank
+// vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, double tau = 0.15, int T = 100000, double EPS = 1e-16)
+// {
+// 	// initialization
+// 	vector<double> pagerank(N, 1.0 / N);
+// 	vector<double> pagerank_tmp(N, 1.0 / N);
+
+// 	// iteration by power method
+// 	int t = 0;
+// 	while (t++ < T)
+// 	{
+// 		for (int j = 0; j < N; j++)
+// 		{
+// 			double x = 0;
+// 			for (auto &flow : nadj_inflows[j])
+// 			{
+// 				int i = flow.first;
+// 				double w = flow.second;
+// 				x += w * pagerank[i];
+// 			}
+// 			pagerank_tmp[j] = tau / N + (1.0 - tau) * x;
+// 		}
+// 		if (l1_norm(pagerank, pagerank_tmp) < EPS)
+// 		{
+// 			// damp one step (without teleportation)
+// 			for (int j = 0; j < N; j++)
+// 			{
+// 				double x = 0;
+// 				for (auto &flow : nadj_inflows[j])
+// 				{
+// 					int i = flow.first;
+// 					double w = flow.second;
+// 					x += w * pagerank_tmp[i];
+// 				}
+// 				pagerank[j] = (1.0 - tau) * x;
+// 			}
+// 			DivideVectorByScaler(pagerank, sum(pagerank));
+// 			break;
+// 		}
+// 		pagerank = pagerank_tmp;
+// 	}
+// 	return pagerank;
+// }
 
 struct CodeLength
 {
@@ -266,6 +393,16 @@ struct CodeLength
 	CodeLength(){};
 	CodeLength(double L, double &q, vector<double> &qs, vector<double> &ps) : L_(L), q_(q), qs_(qs), ps_(ps){};
 };
+
+vector<vector<int>> get_init_partition(int N)
+{
+	vector<vector<int>> community(N);
+	for (int alpha = 0; alpha < N; alpha++)
+	{
+		community[alpha] = {alpha};
+	}
+	return community;
+}
 
 // to get community index of each node
 // if a node belongs to no community, its community index is -1
@@ -337,20 +474,48 @@ struct Community
 	// vector<vector<Flow>> adj_outflows_;
 	vector<vector<Flow>> nadj_inflows_;
 	vector<vector<Flow>> nadj_outflows_;
+	vector<int> dangling_nodes_;
 	vector<double> pagerank_;
 	double tau_;
 	vector<vector<int>> community_;
 	vector<int> n2c_;
 	CodeLength code_;
 	Community() { this->N_ = 0; };
-	Community(int N, vector<vector<Flow>> &nadj_inflows, double tau, vector<vector<int>> &community) : N_(N), nadj_inflows_(nadj_inflows), tau_(tau), community_(community)
+	// initialize with all separated partition
+	Community(vector<Link> &weighted_links, double tau) : tau_(tau)
+	{
+		this->N_ = get_N(weighted_links);
+		FlowSet flowset = get_flowset(weighted_links, this->N_);
+		this->nadj_inflows_ = flowset.nadj_inflows_;
+		this->nadj_outflows_ = flowset.nadj_outflows_;
+		this->dangling_nodes_ = flowset.dangling_nodes_;
+		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, this->dangling_nodes_, tau);
+		this->community_ = get_init_partition(this->N_);
+		this->n2c_ = get_n2c(this->N_, this->community_);
+		this->code_ = get_code_length(this->nadj_inflows_, this->pagerank_, tau, this->community_, this->n2c_);
+	}
+	// initialize with given partition
+	Community(vector<Link> &weighted_links, double tau, vector<vector<int>> &community) : tau_(tau), community_(community)
+	{
+		this->N_ = get_N(weighted_links);
+		FlowSet flowset = get_flowset(weighted_links, this->N_);
+		this->nadj_inflows_ = flowset.nadj_inflows_;
+		this->nadj_outflows_ = flowset.nadj_outflows_;
+		this->dangling_nodes_ = flowset.dangling_nodes_;
+		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, this->dangling_nodes_, tau);
+		this->n2c_ = get_n2c(this->N_, community);
+		this->code_ = get_code_length(this->nadj_inflows_, this->pagerank_, tau, community, this->n2c_);
+	}
+	// do not use
+	Community(int N, vector<vector<Flow>> &nadj_inflows, vector<int> &dangling_nodes, double tau, vector<vector<int>> &community) : N_(N), nadj_inflows_(nadj_inflows), dangling_nodes_(dangling_nodes), tau_(tau), community_(community)
 	{
 		this->nadj_outflows_ = inflows2outflows(nadj_inflows_);
-		this->pagerank_ = get_pagerank(N, nadj_inflows, tau);
+		this->pagerank_ = get_pagerank(N, nadj_inflows, dangling_nodes, tau);
 		this->n2c_ = get_n2c(N, community);
 		this->code_ = get_code_length(nadj_inflows, this->pagerank_, tau, community, this->n2c_);
 	};
-	Community(vector<vector<Flow>> &nadj_inflows, vector<double> &pagerank, double tau, vector<vector<int>> &community, vector<int> n2c) : nadj_inflows_(nadj_inflows), pagerank_(pagerank), tau_(tau), community_(community), n2c_(n2c)
+	// do not use
+	Community(vector<vector<Flow>> &nadj_inflows, vector<double> &pagerank, double tau, vector<vector<int>> &community, vector<int> &n2c) : nadj_inflows_(nadj_inflows), pagerank_(pagerank), tau_(tau), community_(community), n2c_(n2c)
 	{
 		this->N_ = pagerank.size();
 		this->nadj_outflows_ = inflows2outflows(nadj_inflows_);
@@ -510,19 +675,10 @@ pair<double, CodeLength> get_delta_L(Community &C, int alpha_0, int i_id, int j_
 	return make_pair(delta_L, code);
 }
 
-Community get_init_community(vector<Link> &links, double tau)
+// initialization
+Community initialization(vector<Link> &links, double tau)
 {
-	// initial community
-	int N = get_N(links);
-	vector<vector<Flow>> agg_nadj_inflows = get_nadj_inflows(links, N);
-	vector<double> pagerank = get_pagerank(N, agg_nadj_inflows, tau);
-	vector<vector<int>> community(N);
-	for (int alpha = 0; alpha < N; alpha++)
-	{
-		community[alpha] = {alpha};
-	}
-	vector<int> n2c = get_n2c(N, community);
-	return Community(agg_nadj_inflows, pagerank, tau, community, n2c);
+	return Community(links, tau);
 }
 
 // to find a module for a node alpha to move
@@ -736,7 +892,7 @@ vector<Community> recursive_search(vector<Link> links, double tau)
 {
 	vector<Community> multilevel_C;
 	cout << "initialization" << endl;
-	Community agg_C = get_init_community(links, tau);
+	Community agg_C = initialization(links, tau);
 	cout << "optimization" << endl;
 	Community opt_C = get_optimal_community(agg_C);
 	cout << "push C" << endl;
@@ -777,15 +933,15 @@ void test_agg_flow()
 	cout << "test for " << graph_name << endl;
 
 	vector<Link> links = read_links(graph_name);
-	int N = get_N(links);
-	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
+	// int N = get_N(links);
+	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
 	double tau = 0.15;
 	int seed = 1;
 	int precision = 3;
 
 	vector<vector<int>> init_community = {{0}, {1}, {2}, {3}};
 	// vector<vector<int>> init_community = {{0, 1}, {2, 3}};
-	Community C = Community(N, adj_flows, tau, init_community);
+	Community C = Community(links, tau, init_community);
 
 	vector<vector<Flow>> agg_flows = get_agg_outflows(C.nadj_outflows_, C.community_, C.n2c_);
 
@@ -799,8 +955,8 @@ void test_3()
 	cout << "test for " << graph_name << endl;
 
 	vector<Link> links = read_links(graph_name);
-	int N = get_N(links);
-	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
+	// int N = get_N(links);
+	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
 	double tau = 0.15;
 
 	// ==========================================================
@@ -816,7 +972,7 @@ void test_3()
 	cout << "  community0: ";
 	print_community(community0, '\n');
 
-	Community C0 = Community(N, adj_flows, tau, community0);
+	Community C0 = Community(links, tau, community0);
 
 	int precision = 4;
 	cout << "  pr = ";
@@ -841,7 +997,7 @@ void test_3()
 	cout << "[info]" << endl;
 	cout << "  community1: ";
 	print_community(community1, '\n');
-	Community C1 = Community(N, adj_flows, tau, community1);
+	Community C1 = Community(links, tau, community1);
 	cout << "  pr = ";
 	print_vector(C1.pagerank_, '\n', precision);
 	cout << "  qs = ";
@@ -866,7 +1022,7 @@ void test_3()
 	cout << "[info]" << endl;
 	cout << "  community2: ";
 	print_community(community2, '\n');
-	Community C2 = Community(N, adj_flows, tau, community2);
+	Community C2 = Community(links, tau, community2);
 	cout << "  pr = ";
 	print_vector(C2.pagerank_, '\n');
 	cout << "  qs = ";
@@ -959,8 +1115,8 @@ void test_4()
 	cout << "test for " << graph_name << endl;
 
 	vector<Link> links = read_links(graph_name);
-	int N = get_N(links);
-	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
+	// int N = get_N(links);
+	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
 	double tau = 0.15;
 	int seed = 1;
 	int precision = 3;
@@ -970,7 +1126,7 @@ void test_4()
 	vector<vector<int>> init_community = {{0, 1, 2, 3}};
 	cout << "\e[0;32m  init community = \e[0m";
 	print_community(init_community, '\n');
-	Community C = Community(N, adj_flows, tau, init_community);
+	Community C = Community(links, tau, init_community);
 	cout << "\e[0;32m  init pagerank = \e[0m";
 	print_vector(C.pagerank_, '\n', precision);
 	cout << "\e[0;32m  init qs = \e[0m";
@@ -983,13 +1139,13 @@ void test_4()
 	// init_community = {{0, 1, 2}, {3}};
 	// cout << "\e[0;32m  init community = \e[0m";
 	// print_community(init_community, '\n');
-	// C = Community(N, adj_flows, tau, init_community);
+	// C = Community(links, tau, init_community);
 	// printf("  L = %1.3f\n", C.code_.L_);
 
 	// init_community = {{0, 1, 2, 3}};
 	// cout << "\e[0;32m  init community = \e[0m";
 	// print_community(init_community, '\n');
-	// C = Community(N, adj_flows, tau, init_community);
+	// C = Community(links, tau, init_community);
 	// printf("  L = %1.3f\n", C.code_.L_);
 
 	// ==========================================================
@@ -1027,9 +1183,7 @@ void test_27()
 	cout << "test for " << graph_name << endl;
 
 	vector<Link> links = read_links(graph_name);
-	int N = get_N(links);
-	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
-	double tau = 0;
+	double tau = 0.15;
 
 	// for (int seed = 0; seed < 10; seed++)
 	// {
@@ -1040,7 +1194,7 @@ void test_27()
 	// 		init_community[i] = {i};
 	// 	}
 
-	// 	Community C = Community(N, adj_flows, tau, init_community);
+	// 	Community C = Community(links, tau, init_community);
 
 	// 	// ==========================================================
 	// 	// test for get optimal community
@@ -1059,7 +1213,7 @@ void test_27()
 
 	// Fig.1-A
 	vector<vector<int>> community = {{0, 1, 2}, {3, 4, 5}, {6, 7, 8}, {9, 10, 11}, {15, 16, 17}, {18, 19, 20}, {21, 22, 23}, {12, 13, 14}, {24, 25, 26}};
-	Community C = Community(N, adj_flows, tau, community);
+	Community C = Community(links, tau, community);
 	int precision = 4;
 	cout << "pagerank = ";
 	print_vector(C.pagerank_, '\n', precision);
@@ -1070,6 +1224,30 @@ void test_27()
 	cout << "n2c = ";
 	print_vector(C.n2c_, '\n', precision);
 	printf(", L = %1.3f\n", -C.code_.L_ / log(2));
+}
+
+void test_3_1()
+{
+	string graph_name = "graphs/3.txt";
+	cout << "========================================" << endl;
+	cout << "test for " << graph_name << endl;
+
+	vector<Link> links = read_links(graph_name);
+	double tau = 0;
+	cout << "tau = " << tau << endl;
+
+	vector<vector<int>> community = {{0, 1, 2}};
+	Community C = Community(links, tau, community);
+	int precision = 4;
+	cout << "pagerank = ";
+	print_vector(C.pagerank_, '\n', precision);
+	cout << "qs = ";
+	print_vector(C.code_.qs_, '\n', precision);
+	cout << "ps = ";
+	print_vector(C.code_.ps_, '\n', precision);
+	cout << "n2c = ";
+	print_vector(C.n2c_, '\n', precision);
+	printf("L = %1.3f\n", -C.code_.L_ / log(2));
 }
 
 // n2c to community
@@ -1093,8 +1271,7 @@ void test_97()
 	bool directed = false;
 	vector<Link> links = read_links(graph_name, directed);
 	int N = get_N(links);
-
-	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
+	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
 	double tau = 0.15;
 
 	int seed = 1;
@@ -1106,7 +1283,7 @@ void test_97()
 		init_community[i] = {i};
 	}
 
-	Community C = Community(N, adj_flows, tau, init_community);
+	Community C = Community(links, tau, init_community);
 	printf(", init L = %1.3f\n", -C.code_.L_ / log(2));
 	Community opt_C = get_optimal_community(C, seed);
 	printf(", L = %1.3f\n", -opt_C.code_.L_ / log(2));
@@ -1120,7 +1297,7 @@ void test_97()
 			init_community[i] = {i};
 		}
 
-		Community C = Community(N, adj_flows, tau, init_community);
+		Community C = Community(links, tau);
 		Community opt_C = get_optimal_community(C, seed);
 		printf(", L = %1.3f\n", -opt_C.code_.L_ / log(2));
 		// cout << "\e[0;32m  detected community = \e[0m";
@@ -1129,7 +1306,7 @@ void test_97()
 
 	vector<vector<int>> community = {{41, 43, 44, 51, 52, 53, 67, 68, 72, 76, 78, 79, 80, 81, 82, 84, 88, 89, 90, 91, 92, 93, 94, 95, 96, 98, 99, 100, 101, 105, 106, 109, 110, 111, 112, 113, 114, 117, 118, 119, 121, 123, 124, 125, 126, 127, 128, 129, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 146, 147, 149, 150, 152, 153, 156, 157, 159, 161, 162, 165, 166, 167, 168, 169, 170, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 229, 230, 231, 232, 233, 234, 235, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 268, 273, 274, 275, 276, 277, 278, 279, 280, 282, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 320, 321, 322, 323, 324, 325}, {42, 47, 48, 49, 54, 56, 58, 59, 60, 64, 83, 85, 86, 97, 104}, {39, 65, 66, 74, 75, 87, 108, 116, 151}, {40, 45, 46, 50, 55, 61, 62, 63}, {1, 2, 3, 4, 5, 8, 23, 24, 27, 28, 30, 34, 35, 36, 37, 38}, {312, 313, 314, 315, 316, 317, 318, 319, 326, 331}, {6, 7, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21}, {266, 267, 271, 272, 281, 283}, {102, 107, 120, 130, 145, 148, 160}, {57, 69, 70, 71, 73, 77}, {16, 22, 25, 26, 29, 31, 32, 33}, {154, 155, 158, 164, 171}, {327, 328, 329, 330, 332}, {122, 163}, {103, 115}, {195, 207}, {228, 236}, {269, 270}, {0}};
 
-	C = Community(N, adj_flows, tau, community);
+	C = Community(links, tau, community);
 	cout << "n2c = ";
 	print_vector(C.n2c_);
 	printf(", L = %1.3f\n", -C.code_.L_ / log(2));
@@ -1146,7 +1323,7 @@ void test_lfr()
 	vector<Link> links = read_links(graph_name, directed, use_weight);
 	int N = get_N(links);
 
-	vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
+	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
 	double tau = 0.15;
 
 	int seed = 1;
@@ -1158,7 +1335,7 @@ void test_lfr()
 		init_community[i] = {i};
 	}
 
-	Community C = Community(N, adj_flows, tau, init_community);
+	Community C = Community(links, tau);
 	printf(", init L = %1.3f\n", C.code_.L_ / log(2));
 	Community opt_C = get_optimal_community(C, seed);
 	printf(", L = %1.3f\n", opt_C.code_.L_ / log(2));
@@ -1166,7 +1343,7 @@ void test_lfr()
 
 	vector<vector<int>> community = {{1, 7, 13, 14, 20, 23, 24, 27, 28, 29, 31, 33, 37, 38, 39, 40, 46, 54, 55, 58, 62, 69, 71, 72, 75, 76, 78, 80, 83, 86, 90, 91, 96, 102, 103, 106, 107, 109, 113, 114, 116, 117, 120, 125, 128, 132, 135, 152, 153, 160, 165, 166, 168, 169, 177, 181, 182, 188, 192, 194, 202, 204, 205, 217, 228, 235, 240, 243, 244, 247, 248, 249}, {0, 2, 3, 4, 5, 6, 9, 10, 11, 15, 17, 25, 26, 30, 32, 35, 36, 41, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 56, 57, 59, 60, 63, 64, 66, 67, 68, 73, 74, 77, 79, 81, 82, 85, 87, 88, 89, 92, 93, 94, 95, 97, 98, 99, 100, 101, 104, 105, 108, 110, 111, 112, 115, 118, 119, 121, 122, 123, 124, 126, 127, 129, 131, 133, 134, 136, 137, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 159, 161, 162, 163, 164, 167, 170, 171, 172, 173, 175, 176, 178, 179, 184, 185, 187, 189, 190, 191, 193, 195, 196, 197, 198, 199, 200, 201, 203, 206, 207, 208, 210, 212, 213, 214, 215, 216, 218, 219, 220, 221, 222, 223, 224, 225, 226, 229, 230, 231, 232, 233, 234, 236, 237, 238, 239, 241, 242, 245, 246}, {8, 12, 16, 18, 19, 21, 22, 34, 61, 65, 70, 84, 130, 138, 174, 180, 183, 186, 209, 211, 227}};
 
-	C = Community(N, adj_flows, tau, community);
+	C = Community(links, tau, community);
 	cout << "n2c = ";
 	print_vector(C.n2c_);
 	printf(", ground L = %1.3f\n", C.code_.L_ / log(2));
@@ -1226,7 +1403,8 @@ int main(int argc, char *argv[])
 	// test_L();
 	// test_3(); // all test passed!! (for one-layer search)
 	// test_4();
-	test_27();
+	// test_27();
+	test_3_1();
 	// test_97();
 	// test_lfr();
 	// test_entropy();
