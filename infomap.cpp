@@ -235,6 +235,18 @@ double get_dangling_sum(vector<double> &v, vector<int> &dangling_nodes)
 	return s;
 }
 
+// outflows[i] = w_i^{out}
+// total_outflow = W
+vector<double> get_teleportation_rate(vector<double> &total_outflows, double sum_outflow)
+{
+	vector<double> teleportation_rate = total_outflows;
+	for (auto &x : teleportation_rate)
+	{
+		x /= sum_outflow;
+	}
+	return teleportation_rate;
+}
+
 struct FlowSet
 {
 	vector<vector<Flow>> adj_outflows_;
@@ -242,19 +254,22 @@ struct FlowSet
 	vector<vector<Flow>> nadj_outflows_;
 	vector<vector<Flow>> nadj_inflows_;
 	vector<int> dangling_nodes_;
+	vector<double> teleportation_rate_;
 	// construtor
 	FlowSet(
 		vector<vector<Flow>> &adj_outflows,
 		vector<vector<Flow>> &adj_inflows,
 		vector<vector<Flow>> &nadj_outflows,
 		vector<vector<Flow>> &nadj_inflows,
-		vector<int> &dangling_nodes) : adj_outflows_(adj_outflows), adj_inflows_(adj_inflows), nadj_outflows_(nadj_outflows), nadj_inflows_(nadj_inflows), dangling_nodes_(dangling_nodes){};
+		vector<int> &dangling_nodes,
+		vector<double> &teleportation_rate) : adj_outflows_(adj_outflows), adj_inflows_(adj_inflows), nadj_outflows_(nadj_outflows), nadj_inflows_(nadj_inflows), dangling_nodes_(dangling_nodes), teleportation_rate_(teleportation_rate){};
 };
 
 // weighted total_outflows
 FlowSet get_flowset(vector<Link> &links, int N)
 {
 	vector<double> total_outflows(N, 0);
+	double sum_outflow = 0;
 	vector<vector<Flow>> adj_outflows(N);
 	vector<vector<Flow>> adj_inflows(N);
 	for (auto &link : links)
@@ -263,6 +278,7 @@ FlowSet get_flowset(vector<Link> &links, int N)
 		int j = get<1>(link);
 		double w = get<2>(link);
 		total_outflows[i] += w;
+		sum_outflow += w;
 		adj_outflows[i].push_back(make_pair(j, w));
 		adj_inflows[j].push_back(make_pair(i, w));
 	}
@@ -288,11 +304,12 @@ FlowSet get_flowset(vector<Link> &links, int N)
 		}
 	}
 	vector<int> dangling_nodes = get_dangling_nodes(total_outflows);
-	return FlowSet(adj_outflows, adj_inflows, nadj_outflows, nadj_inflows, dangling_nodes);
+	vector<double> teleportation_rate = get_teleportation_rate(total_outflows, sum_outflow);
+	return FlowSet(adj_outflows, adj_inflows, nadj_outflows, nadj_inflows, dangling_nodes, teleportation_rate);
 }
 
-// to calculate pagerank
-vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, vector<int> &dangling_nodes, double tau = 0.15, int T = 100000, double EPS = 1e-6)
+// to calculate pagerank with unrecorded link teleportation
+vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, vector<int> &dangling_nodes, vector<double> &teleportation_rate, double tau = 0.15, int T = 100000, double EPS = 1e-6)
 {
 	// initialization
 	vector<double> pagerank(N, 1.0 / N);
@@ -314,7 +331,8 @@ vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, vector<in
 				x += w * pagerank_last[i];
 			}
 			double dangling_sum = get_dangling_sum(pagerank_last, dangling_nodes);
-			pagerank[j] = tau / N + (1.0 - tau) / N * dangling_sum + (1.0 - tau) * x;
+			double teleportationFlow = tau + (1.0 - tau) * dangling_sum;
+			pagerank[j] = teleportationFlow * teleportation_rate[j] + (1.0 - tau) * x;
 		}
 		if (l1_norm(pagerank, pagerank_last) < EPS)
 		{
@@ -335,6 +353,8 @@ vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, vector<in
 			return pagerank;
 		}
 		pagerank_last = pagerank;
+		// cout << "t = " << t << endl;
+		// print_vector(pagerank, '\n', 3);
 	}
 	cout << "total steps to converge: " << T << " (not converged)" << endl;
 	return pagerank;
@@ -474,7 +494,7 @@ struct Community
 	// vector<vector<Flow>> adj_outflows_;
 	vector<vector<Flow>> nadj_inflows_;
 	vector<vector<Flow>> nadj_outflows_;
-	vector<int> dangling_nodes_;
+	// vector<int> dangling_nodes_;
 	vector<double> pagerank_;
 	double tau_;
 	vector<vector<int>> community_;
@@ -488,8 +508,8 @@ struct Community
 		FlowSet flowset = get_flowset(weighted_links, this->N_);
 		this->nadj_inflows_ = flowset.nadj_inflows_;
 		this->nadj_outflows_ = flowset.nadj_outflows_;
-		this->dangling_nodes_ = flowset.dangling_nodes_;
-		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, this->dangling_nodes_, tau);
+		// this->dangling_nodes_ = flowset.dangling_nodes_;
+		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, flowset.dangling_nodes_, flowset.teleportation_rate_, tau);
 		this->community_ = get_init_partition(this->N_);
 		this->n2c_ = get_n2c(this->N_, this->community_);
 		this->code_ = get_code_length(this->nadj_inflows_, this->pagerank_, tau, this->community_, this->n2c_);
@@ -501,19 +521,11 @@ struct Community
 		FlowSet flowset = get_flowset(weighted_links, this->N_);
 		this->nadj_inflows_ = flowset.nadj_inflows_;
 		this->nadj_outflows_ = flowset.nadj_outflows_;
-		this->dangling_nodes_ = flowset.dangling_nodes_;
-		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, this->dangling_nodes_, tau);
+		// this->dangling_nodes_ = flowset.dangling_nodes_;
+		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, flowset.dangling_nodes_, flowset.teleportation_rate_, tau);
 		this->n2c_ = get_n2c(this->N_, community);
 		this->code_ = get_code_length(this->nadj_inflows_, this->pagerank_, tau, community, this->n2c_);
 	}
-	// do not use
-	Community(int N, vector<vector<Flow>> &nadj_inflows, vector<int> &dangling_nodes, double tau, vector<vector<int>> &community) : N_(N), nadj_inflows_(nadj_inflows), dangling_nodes_(dangling_nodes), tau_(tau), community_(community)
-	{
-		this->nadj_outflows_ = inflows2outflows(nadj_inflows_);
-		this->pagerank_ = get_pagerank(N, nadj_inflows, dangling_nodes, tau);
-		this->n2c_ = get_n2c(N, community);
-		this->code_ = get_code_length(nadj_inflows, this->pagerank_, tau, community, this->n2c_);
-	};
 	// do not use
 	Community(vector<vector<Flow>> &nadj_inflows, vector<double> &pagerank, double tau, vector<vector<int>> &community, vector<int> &n2c) : nadj_inflows_(nadj_inflows), pagerank_(pagerank), tau_(tau), community_(community), n2c_(n2c)
 	{
@@ -1127,6 +1139,7 @@ void test_4()
 	cout << "\e[0;32m  init community = \e[0m";
 	print_community(init_community, '\n');
 	Community C = Community(links, tau, init_community);
+	printf("\e[0;32m  tau = \e[0m%1.3f\n", tau);
 	cout << "\e[0;32m  init pagerank = \e[0m";
 	print_vector(C.pagerank_, '\n', precision);
 	cout << "\e[0;32m  init qs = \e[0m";
@@ -1339,7 +1352,8 @@ void test_lfr()
 	printf(", init L = %1.3f\n", C.code_.L_ / log(2));
 	Community opt_C = get_optimal_community(C, seed);
 	printf(", L = %1.3f\n", opt_C.code_.L_ / log(2));
-	print_community(opt_C.community_);
+	print_community(opt_C.community_, '\n');
+	cout << "NC = " << opt_C.community_.size() << endl;
 
 	vector<vector<int>> community = {{1, 7, 13, 14, 20, 23, 24, 27, 28, 29, 31, 33, 37, 38, 39, 40, 46, 54, 55, 58, 62, 69, 71, 72, 75, 76, 78, 80, 83, 86, 90, 91, 96, 102, 103, 106, 107, 109, 113, 114, 116, 117, 120, 125, 128, 132, 135, 152, 153, 160, 165, 166, 168, 169, 177, 181, 182, 188, 192, 194, 202, 204, 205, 217, 228, 235, 240, 243, 244, 247, 248, 249}, {0, 2, 3, 4, 5, 6, 9, 10, 11, 15, 17, 25, 26, 30, 32, 35, 36, 41, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 56, 57, 59, 60, 63, 64, 66, 67, 68, 73, 74, 77, 79, 81, 82, 85, 87, 88, 89, 92, 93, 94, 95, 97, 98, 99, 100, 101, 104, 105, 108, 110, 111, 112, 115, 118, 119, 121, 122, 123, 124, 126, 127, 129, 131, 133, 134, 136, 137, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 159, 161, 162, 163, 164, 167, 170, 171, 172, 173, 175, 176, 178, 179, 184, 185, 187, 189, 190, 191, 193, 195, 196, 197, 198, 199, 200, 201, 203, 206, 207, 208, 210, 212, 213, 214, 215, 216, 218, 219, 220, 221, 222, 223, 224, 225, 226, 229, 230, 231, 232, 233, 234, 236, 237, 238, 239, 241, 242, 245, 246}, {8, 12, 16, 18, 19, 21, 22, 34, 61, 65, 70, 84, 130, 138, 174, 180, 183, 186, 209, 211, 227}};
 
@@ -1404,9 +1418,9 @@ int main(int argc, char *argv[])
 	// test_3(); // all test passed!! (for one-layer search)
 	// test_4();
 	// test_27();
-	test_3_1();
+	// test_3_1();
 	// test_97();
-	// test_lfr();
+	test_lfr();
 	// test_entropy();
 	// test_plogp();
 	return 0;
