@@ -198,12 +198,17 @@ vector<vector<Flow>> inflows2outflows(vector<vector<Flow>> &inflows)
 	return outflows;
 }
 
-double plogp(double p, double EPS = 1e-16)
+double plogp(double p, double EPS = 1e-15)
 {
 	return (abs(p) < EPS) ? 0 : p * log(p);
 }
 
-double entropy(vector<double> &ps, double EPS = 1e-16)
+double plog2p(double p, double EPS = 1e-15)
+{
+	return (abs(p) < EPS) ? 0 : p * log(p) / log(2);
+}
+
+double entropy(vector<double> &ps, double EPS = 1e-15)
 {
 	double h = 0;
 	for (auto &p : ps)
@@ -216,7 +221,7 @@ double entropy(vector<double> &ps, double EPS = 1e-16)
 vector<int> get_dangling_nodes(vector<double> &total_outflow)
 {
 	vector<int> dangling_nodes;
-	double EPS = 1e-16;
+	double EPS = 1e-15;
 	for (int i = 0; i < total_outflow.size(); i++)
 	{
 		if (total_outflow[i] < EPS)
@@ -361,7 +366,7 @@ vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, vector<in
 }
 
 // // to calculate pagerank
-// vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, double tau = 0.15, int T = 100000, double EPS = 1e-16)
+// vector<double> get_pagerank(int N, vector<vector<Flow>> &nadj_inflows, double tau = 0.15, int T = 100000, double EPS = 1e-15)
 // {
 // 	// initialization
 // 	vector<double> pagerank(N, 1.0 / N);
@@ -441,13 +446,15 @@ vector<int> get_n2c(int N, vector<vector<int>> &community)
 }
 
 // to calculate map equation
-CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &pagerank, double tau, vector<vector<int>> &community, vector<int> &n2c)
+CodeLength get_code_length_0(vector<vector<Flow>> &nadj_inflows, vector<double> &pagerank, double tau, vector<vector<int>> &community, vector<int> &n2c)
 {
 	int N = pagerank.size();
 	int NC = community.size();
 	vector<vector<Flow>> nadj_outflows = inflows2outflows(nadj_inflows);
 	vector<double> qs(NC, 0);
 	vector<double> ps(NC, 0);
+
+	double q_enter = 0;
 	for (int i = 0; i < NC; i++)
 	{
 		int Ni = community[i].size();
@@ -465,12 +472,21 @@ CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &p
 		qs[i] = (1 - tau) * qi_adj;
 		// qs[i] = tau * qi_tel + (1 - tau) * qi_adj;
 		ps[i] = qs[i] + sum(pr_i);
+
+		for (auto &alpha : community[i])
+		{
+			for (auto &flow : nadj_inflows[alpha])
+			{
+				if (n2c[flow.first] != i)
+					q_enter += flow.second * pagerank[alpha];
+			}
+		}
 	}
 	// cout << "===================================" << endl;
 	// cout << "test for get code length" << endl;
 	// cout << "===================================" << endl;
 	double q = sum(qs);
-	double EPS = 1e-16;
+	double EPS = 1e-15;
 	int precision = 4;
 	// cout << "  pr = ";
 	// print_vector(pagerank, '\n', precision);
@@ -486,6 +502,78 @@ CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &p
 	double L = 2 * entropy(qs, EPS) - entropy(ps, EPS) - plogp(q, EPS) + entropy(pagerank, EPS);
 
 	return CodeLength(L, q, qs, ps);
+}
+
+// to calculate map equation
+CodeLength get_code_length(vector<vector<Flow>> &nadj_inflows, vector<double> &pagerank, double tau, vector<vector<int>> &community, vector<int> &n2c)
+{
+	int N = pagerank.size();
+	int NC = community.size();
+	vector<vector<Flow>> nadj_outflows = inflows2outflows(nadj_inflows);
+	vector<double> qs(NC, 0);
+	vector<double> ps(NC, 0);
+
+	vector<double> indexCodeLength(NC, 0);
+	double moduleCodeLength = 0;
+
+	// to calculate indexCodeLength
+	for (int i = 0; i < NC; i++)
+	{
+		double exitFlow = 0;  // q_i_exit
+		double totalFlow = 0; // p_i_circle
+
+		double sum_flow = 0; // sum of p_alpha
+		double sum_flow_log_flow = 0;
+
+		for (auto &alpha : community[i])
+		{
+			for (auto &outflow : nadj_outflows[alpha])
+			{
+				int beta = outflow.first;
+				if (n2c[beta] != i)
+				{
+					exitFlow += (1 - tau) * outflow.second * pagerank[alpha];
+				}
+			}
+			double flow = pagerank[alpha];
+			sum_flow += flow;
+			sum_flow_log_flow += plog2p(flow);
+		}
+		totalFlow = exitFlow + sum_flow;
+		indexCodeLength[i] = plog2p(exitFlow) + sum_flow_log_flow - plog2p(totalFlow);
+	}
+
+	// to calculate moduleCodeLength
+	double sum_enterFlow = 0;
+	for (int i = 0; i < NC; i++)
+	{
+		double enterFlow = 0; // q_i_enter
+
+		for (auto &beta : community[i])
+		{
+			for (auto &inflow : nadj_inflows[beta])
+			{
+				int alpha = inflow.first;
+				if (n2c[alpha] != i)
+				{
+					enterFlow += (1 - tau) * inflow.second * pagerank[alpha];
+				}
+			}
+		}
+		sum_enterFlow = enterFlow;
+		moduleCodeLength += plog2p(enterFlow);
+	}
+	moduleCodeLength -= plog2p(sum_enterFlow);
+
+	double codeLength = moduleCodeLength + sum(indexCodeLength);
+
+	cout << "  indexCodeLength = ";
+	print_vector(indexCodeLength, '\n');
+	cout << "  moduleCodeLength = " << moduleCodeLength << endl;
+
+	double q = sum(qs);
+
+	return CodeLength(codeLength, q, qs, ps);
 }
 
 struct Community
@@ -554,7 +642,7 @@ void print_community(vector<vector<int>> &community, char br = '\0')
 // delta(plogp)
 double delta_plogp(double p1, double p2)
 {
-	double EPS = 1e-16;
+	double EPS = 1e-15;
 	return plogp(p2, EPS) - plogp(p1, EPS);
 }
 
@@ -1020,12 +1108,12 @@ void test_3()
 	double L1 = C1.code_.L_;
 	double dL2_ = get_delta_L(C1, 0, 0, 1).first;
 	double L2_ = get_delta_L(C1, 0, 0, 1).second.L_;
-	cout << "  L  = " << L1 << endl;
+	cout << "  L1  = " << L1 << endl;
 	cout << "  L2_  = " << L2_ << endl;
 	cout << "  dL2_  = " << dL2_ << endl;
 	cout << "  test for get_delta_L >>";
-	assert(L1 == L1_);
-	assert(L2_ == L1 + dL2_);
+	assert(abs(L1 - L1_) < 1e-15);
+	assert(abs(L2_ - (L1 + dL2_)) < 1e-15);
 	cout << "\e[0;32m passed!! \e[0m" << endl;
 
 	// community 2: moved node 0 from module 0 to 1
@@ -1133,9 +1221,8 @@ void test_4()
 	int seed = 1;
 	int precision = 3;
 
-	// vector<vector<int>> init_community = {{0}, {1}, {2}, {3}};
+	vector<vector<int>> init_community = {{0}, {1}, {2}, {3}};
 	// vector<vector<int>> init_community = {{0, 1}, {2, 3}};
-	vector<vector<int>> init_community = {{0, 1, 2, 3}};
 	cout << "\e[0;32m  init community = \e[0m";
 	print_community(init_community, '\n');
 	Community C = Community(links, tau, init_community);
@@ -1146,20 +1233,26 @@ void test_4()
 	print_vector(C.code_.qs_, '\n', precision);
 	cout << "\e[0;32m  init ps = \e[0m";
 	print_vector(C.code_.ps_, '\n', precision);
-	printf("\e[0;32m  L = \e[0m%1.3f\n", C.code_.L_);
-	printf("\e[0;32m  L = \e[0m%1.3f\n", C.code_.L_ / log(2));
+	printf("\e[0;32m  L = \e[0m%1.3f\n", -C.code_.L_);
+	// printf("\e[0;32m  L = \e[0m%1.3f\n", -C.code_.L_ / log(2));
 
-	// init_community = {{0, 1, 2}, {3}};
-	// cout << "\e[0;32m  init community = \e[0m";
-	// print_community(init_community, '\n');
-	// C = Community(links, tau, init_community);
-	// printf("  L = %1.3f\n", C.code_.L_);
+	init_community = {{0}, {1}, {2, 3}};
+	cout << "\e[0;32m  init community = \e[0m";
+	print_community(init_community, '\n');
+	C = Community(links, tau, init_community);
+	printf("  L = %1.3f\n", -C.code_.L_);
 
-	// init_community = {{0, 1, 2, 3}};
-	// cout << "\e[0;32m  init community = \e[0m";
-	// print_community(init_community, '\n');
-	// C = Community(links, tau, init_community);
-	// printf("  L = %1.3f\n", C.code_.L_);
+	init_community = {{0, 1, 2}, {3}};
+	cout << "\e[0;32m  init community = \e[0m";
+	print_community(init_community, '\n');
+	C = Community(links, tau, init_community);
+	printf("  L = %1.3f\n", -C.code_.L_);
+
+	init_community = {{0, 1, 2, 3}};
+	cout << "\e[0;32m  init community = \e[0m";
+	print_community(init_community, '\n');
+	C = Community(links, tau, init_community);
+	printf("  L = %1.3f\n", -C.code_.L_);
 
 	// ==========================================================
 	// test for get optimal community
@@ -1416,11 +1509,11 @@ int main(int argc, char *argv[])
 {
 	// test_L();
 	// test_3(); // all test passed!! (for one-layer search)
-	// test_4();
+	test_4();
 	// test_27();
 	// test_3_1();
 	// test_97();
-	test_lfr();
+	// test_lfr();
 	// test_entropy();
 	// test_plogp();
 	return 0;
