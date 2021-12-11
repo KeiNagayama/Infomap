@@ -472,14 +472,16 @@ double delta_plogp(double p1, double p2)
 
 struct DeltaCodeLength
 {
-	double deltaL;
-	CodeLength newCode;
-	DeltaCodeLength(double deltaL, CodeLength &newCode) : deltaL(deltaL), newCode(newCode){};
+	int targetModule;
+	double delta_codeLength;
+	CodeLength new_code;
+	DeltaCodeLength(int targetModule, double delta_codeLength, CodeLength &new_code)
+		: targetModule(targetModule), delta_codeLength(new_codeLength), new_code(new_code){};
 };
 
 // to calculate delta codelength when moving node gamma from sourceModule to targetModule
-double
-get_delta_L(Community &C, int gamma, int sourceModule, int targetModule)
+DeltaCodeLength
+get_deltaCodeLength(Community &C, int gamma, int sourceModule, int targetModule)
 {
 	vector<int> &n2c = C.n2c;
 	double delta_source_enterFlow = 0;
@@ -492,7 +494,6 @@ get_delta_L(Community &C, int gamma, int sourceModule, int targetModule)
 	// outlinkflow
 	for (auto &outLinkFlow : C.flowdata.adj_outLinkFlows[gamma])
 	{
-		cout << "weight = " << outLinkFlow.weight << endl;
 		int other = n2c[outLinkFlow.target];
 		// old module
 		if (other == sourceModule)
@@ -509,7 +510,6 @@ get_delta_L(Community &C, int gamma, int sourceModule, int targetModule)
 	// inlinkflows
 	for (auto &inLinkFlow : C.flowdata.adj_inLinkFlows[gamma])
 	{
-		cout << "weight = " << inLinkFlow.weight << endl;
 		int other = n2c[inLinkFlow.source];
 		// old module
 		if (other != sourceModule)
@@ -523,14 +523,7 @@ get_delta_L(Community &C, int gamma, int sourceModule, int targetModule)
 			delta_target_exitFlow -= inLinkFlow.weight;
 	}
 
-	cout << "--------------------------" << endl;
-	cout << "delta_source_enterFlow = " << delta_source_enterFlow << endl;
-	cout << "delta_source_exitFlow  = " << delta_source_exitFlow << endl;
-	cout << "delta_target_enterFlow = " << delta_target_enterFlow << endl;
-	cout << "delta_target_exitFlow  = " << delta_target_exitFlow << endl;
-
 	double nodeFlow = C.flowdata.nodeFlows[gamma];
-	cout << "nodeFlow = " << nodeFlow << endl;
 	double delta_source_totalFlow = delta_source_exitFlow - nodeFlow;
 	double delta_target_totalFlow = delta_target_exitFlow + nodeFlow;
 
@@ -538,11 +531,6 @@ get_delta_L(Community &C, int gamma, int sourceModule, int targetModule)
 	double old_sumEnter = sum(C.code.enterFlows);
 	double new_sumEnter = old_sumEnter + delta_source_enterFlow + delta_target_enterFlow;
 	double delta_sumEnter_log_sumEnter = plogp(new_sumEnter) - plogp(old_sumEnter);
-
-	cout << "--------------------------" << endl;
-	cout << "old_sumEnter = " << old_sumEnter << endl;
-	cout << "new_sumEnter = " << new_sumEnter << endl;
-	cout << "delta_sumEnter_log_sumEnter = " << delta_sumEnter_log_sumEnter << endl;
 
 	// souce module flows
 	double old_source_enterFlow = C.code.enterFlows[sourceModule];
@@ -567,323 +555,215 @@ get_delta_L(Community &C, int gamma, int sourceModule, int targetModule)
 	double delta_target_total_log_total = plogp(new_target_totalFlow) - plogp(old_target_totalFlow);
 
 	double sum_delta_enter_log_enter = delta_source_enter_log_enter + delta_target_enter_log_enter;
-	double sum_exit_log_exit = delta_source_exit_log_exit + delta_target_exit_log_exit;
-	double sum_totalFlow_log_totalFlow = delta_source_total_log_total + delta_target_total_log_total;
 
 	double delta_moduleCodeLength = sum_delta_enter_log_enter - delta_sumEnter_log_sumEnter;
-	double delta_indexCodeLength = sum_exit_log_exit - sum_totalFlow_log_totalFlow;
+	double delta_source_indexCodeLength = delta_source_exit_log_exit - delta_source_total_log_total;
+	double delta_target_indexCodeLength = delta_target_exit_log_exit - delta_target_total_log_total;
+	double delta_indexCodeLength = delta_source_indexCodeLength + delta_target_indexCodeLength;
 	double delta_codeLength = delta_moduleCodeLength + delta_indexCodeLength;
 
-	cout << "--------------------------" << endl;
-	cout << "old_source_enterFlow = " << old_source_enterFlow << endl;
-	cout << "old_source_exitFlow  = " << old_source_exitFlow << endl;
-	cout << "old_target_enterFlow = " << old_target_enterFlow << endl;
-	cout << "old_target_exitFlow  = " << old_target_exitFlow << endl;
-	cout << "new_source_enterFlow = " << new_source_enterFlow << endl;
-	cout << "new_source_exitFlow  = " << new_source_exitFlow << endl;
-	cout << "new_target_enterFlow = " << new_target_enterFlow << endl;
-	cout << "new_target_exitFlow  = " << new_target_exitFlow << endl;
+	// cout << "--------------------------" << endl;
+	// cout << "delta_source_enterFlow = " << delta_source_enterFlow << endl;
+	// cout << "delta_source_exitFlow  = " << delta_source_exitFlow << endl;
+	// cout << "delta_target_enterFlow = " << delta_target_enterFlow << endl;
+	// cout << "delta_target_exitFlow  = " << delta_target_exitFlow << endl;
 
-	cout << "--------------------------" << endl;
-	cout << "delta_source_enter_log_enter = " << delta_source_enter_log_enter << endl;
-	cout << "delta_source_exit_log_exit   = " << delta_source_exit_log_exit << endl;
-	cout << "delta_source_total_log_total = " << delta_source_total_log_total << endl;
-	cout << "delta_target_enter_log_enter = " << delta_target_enter_log_enter << endl;
-	cout << "delta_target_exit_log_exit   = " << delta_target_exit_log_exit << endl;
-	cout << "delta_target_total_log_total = " << delta_target_total_log_total << endl;
+	// cout << "--------------------------" << endl;
+	// cout << "old_sumEnter = " << old_sumEnter << endl;
+	// cout << "new_sumEnter = " << new_sumEnter << endl;
+	// cout << "delta_sumEnter_log_sumEnter = " << delta_sumEnter_log_sumEnter << endl;
 
-	cout << "--------------------------" << endl;
-	cout << "delta_moduleCodeLength = " << delta_moduleCodeLength << endl;
-	cout << "delta_indexCodeLength = " << delta_indexCodeLength << endl;
-	cout << "delta_codeLength = " << delta_codeLength << endl;
+	// cout << "--------------------------" << endl;
+	// cout << "old_source_enterFlow = " << old_source_enterFlow << endl;
+	// cout << "old_source_exitFlow  = " << old_source_exitFlow << endl;
+	// cout << "old_target_enterFlow = " << old_target_enterFlow << endl;
+	// cout << "old_target_exitFlow  = " << old_target_exitFlow << endl;
+	// cout << "new_source_enterFlow = " << new_source_enterFlow << endl;
+	// cout << "new_source_exitFlow  = " << new_source_exitFlow << endl;
+	// cout << "new_target_enterFlow = " << new_target_enterFlow << endl;
+	// cout << "new_target_exitFlow  = " << new_target_exitFlow << endl;
 
-	cout << "--------------------------" << endl;
+	// cout << "--------------------------" << endl;
+	// cout << "delta_source_enter_log_enter = " << delta_source_enter_log_enter << endl;
+	// cout << "delta_source_exit_log_exit   = " << delta_source_exit_log_exit << endl;
+	// cout << "delta_source_total_log_total = " << delta_source_total_log_total << endl;
+	// cout << "delta_target_enter_log_enter = " << delta_target_enter_log_enter << endl;
+	// cout << "delta_target_exit_log_exit   = " << delta_target_exit_log_exit << endl;
+	// cout << "delta_target_total_log_total = " << delta_target_total_log_total << endl;
 
-	return delta_codeLength;
+	// cout << "--------------------------" << endl;
+	// cout << "delta_moduleCodeLength = " << delta_moduleCodeLength << endl;
+	// cout << "delta_indexCodeLength = " << delta_indexCodeLength << endl;
+	// cout << "delta_codeLength = " << delta_codeLength << endl;
+
+	// cout << "--------------------------" << endl;
+
+	double new_codeLength = C.code.L + delta_codeLength;
+	double new_moduleCodeLength = C.code.moduleCodeLength + delta_moduleCodeLength;
+	vector<double> new_indexCodeLength = C.code.indexCodeLength;
+	new_indexCodeLength[sourceModule] += delta_source_indexCodeLength;
+	new_indexCodeLength[targetModule] += delta_target_indexCodeLength;
+
+	vector<double> new_enterFlows = C.code.enterFlows;
+	vector<double> new_exitFlows = C.code.exitFlows;
+	vector<double> new_totalFlows = C.code.totalFlows;
+	new_enterFlows[sourceModule] += delta_source_enterFlow;
+	new_exitFlows[sourceModule] += delta_source_exitFlow;
+	new_totalFlows[sourceModule] += delta_source_totalFlow;
+	new_enterFlows[targetModule] += delta_target_enterFlow;
+	new_exitFlows[targetModule] += delta_target_exitFlow;
+	new_totalFlows[targetModule] += delta_target_totalFlow;
+
+	CodeLength new_code = CodeLength(new_codeLength, new_moduleCodeLength, new_indexCodeLength, new_enterFlows, new_exitFlows, new_totalFlows);
+
+	return DeltaCodeLengthData(targetModule, delta_codeLength, new_code);
 }
 
-// // return deltaL and updated CodeLength
-// pair<double, CodeLength> get_delta_L(Community &C, int alpha_0, int i_id, int j_id)
-// {
-// 	vector<vector<Flow>> nadj_inflows = C.nadj_inflows_;
-// 	vector<vector<Flow>> nadj_outflows = C.nadj_outflows_;
+// to find a module for a node gamma to move
+DeltaCodeLengthData get_optimal_target_module(Community &C, int gamma, int sourceModule)
+{
+	vector<int> &n2c = C.n2c_;
+	int opt_targetModule = sourceModule;
+	double opt_delta_L = 0;
+	DeltaCodeLength &opt_deltaCodeLength;
 
-// 	vector<double> pagerank = C.nodeFlow;
-// 	double tau = C.tau;
-// 	vector<int> n2c = C.n2c;
-// 	CodeLength code = C.code;
-// 	vector<vector<int>> community = C.community;
-// 	vector<int> i = community[i_id];
-// 	vector<int> j = community[j_id];
+	for (auto &outflow : C.flowdata.adj_outLinkFlows[gamma])
+	{
+		int targetModule = n2c[outflow.target];
+		if (targetModule == sourceModule)
+			continue;
+		DeltaCodeLength deltaCodeLength = get_deltaCodeLength(C, gamma, sourceModule, targetModule);
+		if (delta_codeLengthData.delta_codeLength > opt_delta_L)
+		{
+			opt_deltaCodeLength = deltaCodeLength;
+		}
+	}
+	return opt_deltaCodeLength;
+}
 
-// 	int N = pagerank.size();
-// 	int Ni = i.size();
-// 	int Nj = j.size();
+// to update community assignment after getting module to move gamma to
+// Even if erasing gamma from module i made {}, remain null module i,
+// which is removed in next process (re-indexing)
+void update_community(vector<vector<int>> &community, vector<int> &n2c, int gamma, int sourceModule, int targetModule)
+{
+	// update community
+	int remove_index = community[sourceModule].size();
+	for (int index = 0; index < community[sourceModule].size(); index++)
+	{
+		if (community[sourceModule][index] == gamma)
+			remove_index = index;
+	}
+	community[sourceModule].erase(community[sourceModule].begin() + remove_index);
+	community[targetModule].push_back(gamma);
 
-// 	// code length values
-// 	double q = code.q_;
-// 	double qi = code.qs_[i_id];
-// 	double qj = code.qs_[j_id];
-// 	double pi = code.ps_[i_id];
-// 	double pj = code.ps_[j_id];
+	// update n2c
+	n2c[gamma] = targetModule;
+	return;
+}
 
-// 	// pageranks in module
-// 	double p_alpha_0 = pagerank[alpha_0];
+// community: return new community
+// n2c: overwrite
+vector<vector<int>> re_index(vector<vector<int>> &community, vector<int> &n2c)
+{
+	// get unique community indices
+	vector<int> unq(n2c);
+	sort(unq.begin(), unq.end());
+	unq.erase(unique(unq.begin(), unq.end()), unq.end());
+	// make a comunity index mapper (old -> new)
+	map<int, int> old2new;
+	for (int i = 0; i < unq.size(); i++)
+	{
+		old2new[unq[i]] = i;
+	}
+	// re-index node-community assignment
+	for (int i = 0; i < n2c.size(); i++)
+	{
+		n2c[i] = old2new[n2c[i]];
+	}
+	// re-index modules
+	vector<vector<int>> new_community;
+	for (auto &i : unq)
+	{
+		new_community.push_back(community[i]);
+	}
+	return new_community;
+}
 
-// 	// ========================================
-// 	// delta_qi = delta_qi_tel + delta_qi_adj
-// 	// ========================================
-// 	// delta_qi_tel
-// 	vector<double> ps_i = slice_vector_by_indices(pagerank, i);
-// 	double delta_qi_tel = 1.0 / N * sum(ps_i) - (N - Ni + 1.0) / N * p_alpha_0;
-// 	// delta_qi_adj
-// 	double delta_qi_adj = 0;
-// 	// 1st term of delta_qi_adj
-// 	if (Ni > 1)
-// 	{
-// 		for (auto &inflow : nadj_inflows[alpha_0])
-// 		{
-// 			int alpha = inflow.first;
-// 			if (n2c[alpha] == i_id && alpha != alpha_0)
-// 				delta_qi_adj += inflow.second * pagerank[alpha];
-// 		}
-// 	}
+// to find optimal community at each level
+Community get_optimal_community(Community &C, int seed = 1)
+{
+	int N = C.N;
+	vector<vector<int>> community = C.community;
+	vector<int> n2c = C.n2c;
 
-// 	// 2nd term of delta_qi_adj
-// 	for (auto &outflow : nadj_outflows[alpha_0])
-// 	{
-// 		if (n2c[outflow.first] != i_id)
-// 			delta_qi_adj -= outflow.second * p_alpha_0;
-// 	}
+	// set random generator
+	mt19937 mt(seed);
+	// node indices for shuffling
+	vector<int> nodes(N);
+	for (int alpha = 0; alpha < N; alpha++)
+	{
+		nodes[alpha] = alpha;
+	}
 
-// 	// delta_qi
-// 	double delta_qi = (1 - tau) * delta_qi_adj;
-// 	// double delta_qi = tau * delta_qi_tel + (1 - tau) * delta_qi_adj;
+	// iteration
+	int T = N; // max iteration counts
+	double total_delta_L = 0;
+	int convergence_counter = 0;
+	for (int t = 0; t < T; t++)
+	{
+		// cout << "t = " << t << endl;
+		double all_delta_L = 0;
+		shuffle(nodes.begin(), nodes.end(), mt);
+		for (auto &alpha : nodes)
+		{
+			// optimiation
+			tuple<int, double, CodeLength> opt = get_optimal_target_module(C, alpha);
+			int j = get<0>(opt);
+			double delta_L = get<1>(opt);
+			CodeLength code = get<2>(opt);
+			// printf("optimization: alpha = %d, j = %d / delta_L = %:.3f\n", alpha, j, delta_L);
+			// update community assignment and codelength
+			if (delta_L > 0)
+			{
+				// printf("optimization: alpha = %d, j = %d / delta_L = %:.3f\n", alpha, j, delta_L);
+				update_community(community, n2c, alpha, j);
+				C.community = community;
+				C.n2c = n2c;
+				C.code = code;
+				// // debug
+				// int precision = 3;
+				// cout << "\e[0;32m  updated community = \e[0m";
+				// print_community(C.community, '\n');
+				// cout << "\e[0;32m  updated qs = \e[0m";
+				// print_vector(C.code.qs_, '\n', precision);
+				// cout << "\e[0;32m  updated ps = \e[0m";
+				// print_vector(C.code.ps_, '\n', precision);
+				// printf("\e[0;32m  L = \e[0m%1.3f\n", C.code.L);
+			}
+			all_delta_L += delta_L;
+		}
+		total_delta_L += all_delta_L;
+		// at convergence
+		if (all_delta_L == 0)
+		{
+			if (convergence_counter++ > 5)
+			{
+				// cout << "total steps to get optimal commmunity: " << t << endl;
+				break;
+			}
+		}
+	}
 
-// 	// ========================================
-// 	// delta_qj = delta_qj_tel + delta_qj_adj
-// 	// ========================================
-// 	// delta_qj_tel
-// 	vector<double> ps_j = slice_vector_by_indices(pagerank, j);
-// 	double delta_qj_tel = -1.0 / N * sum(ps_j) + (N - Nj - 1.0) / N * p_alpha_0;
+	// re-index community
+	vector<vector<int>> new_community = re_index(community, n2c);
+	cout << "n2c = ";
+	print_vector(n2c);
 
-// 	// delta_qj_adj
-// 	double delta_qj_adj = 0;
-// 	// 1st term of delta_qj_adj
-// 	for (auto &inflow : nadj_inflows[alpha_0])
-// 	{
-// 		int alpha = inflow.first;
-// 		if (n2c[alpha] == j_id)
-// 			delta_qj_adj -= inflow.second * pagerank[alpha];
-// 	}
-
-// 	// 2nd term of delta_qj_adj
-// 	for (auto &outflow : nadj_outflows[alpha_0])
-// 	{
-// 		int beta = outflow.first;
-// 		if (n2c[beta] != j_id || beta == alpha_0)
-// 			delta_qj_adj += outflow.second * p_alpha_0;
-// 	}
-// 	// delta_qj
-// 	double delta_qj = (1 - tau) * delta_qj_adj;
-// 	// double delta_qj = tau * delta_qj_tel + (1 - tau) * delta_qj_adj;
-
-// 	// ========================================
-// 	// delta_q
-// 	// ========================================
-// 	double delta_q = delta_qi + delta_qj;
-
-// 	// delta_pi, delta_pj
-// 	double delta_pi = delta_qi - p_alpha_0;
-// 	double delta_pj = delta_qj + p_alpha_0;
-
-// 	// cout << "delta_qi = " << delta_qi << endl;
-// 	// cout << "delta_qj = " << delta_qj << endl;
-// 	// cout << "delta_pi = " << delta_pi << endl;
-// 	// cout << "delta_pj = " << delta_pj << endl;
-
-// 	// delta_L
-// 	double qi2 = qi + delta_qi;
-// 	double qj2 = qj + delta_qj;
-// 	double q2 = q + delta_q;
-// 	double pi2 = pi + delta_pi;
-// 	double pj2 = pj + delta_pj;
-
-// 	if (Ni == 1)
-// 	{
-// 		qi2 = 0;
-// 		pi2 = 0;
-// 	}
-// 	if (Nj + 1 == N)
-// 	{
-// 		qj2 = 0;
-// 	}
-
-// 	double delta_L = 2 * (delta_plogp(qi, qi2) + delta_plogp(qj, qj2)) - (delta_plogp(pi, pi2) + delta_plogp(pj, pj2)) - delta_plogp(q, q2);
-// 	// update CodeLength
-// 	code.L += delta_L;
-// 	code.q_ = q2;
-// 	code.qs_[i_id] = qi2;
-// 	code.qs_[j_id] = qj2;
-// 	code.ps_[i_id] = pi2;
-// 	code.ps_[j_id] = pj2;
-
-// 	return make_pair(delta_L, code);
-// }
-
-// // initialization
-// Community initialization(vector<Link> &links, double tau)
-// {
-// 	return Community(links, tau);
-// }
-
-// // to find a module for a node alpha to move
-// tuple<int, double, CodeLength> get_optimal_target_module(Community &C, int alpha)
-// {
-// 	vector<int> n2c = C.n2c;
-// 	int i = n2c[alpha];
-// 	int opt_j = i;
-// 	double opt_delta_L = 0;
-// 	CodeLength updated_code;
-
-// 	for (auto &outflow : C.nadj_outflows_[alpha])
-// 	{
-// 		int j = n2c[outflow.first];
-// 		pair<double, CodeLength> pr = get_delta_L(C, alpha, i, j);
-// 		double delta_L = (i == j) ? 0 : pr.first;
-// 		updated_code = pr.second;
-// 		if (delta_L > opt_delta_L)
-// 		{
-// 			opt_j = j;
-// 			opt_delta_L = delta_L;
-// 		}
-// 	}
-// 	return make_tuple(opt_j, opt_delta_L, updated_code);
-// }
-
-// // to update community assignment after getting module to move alpha to
-// // Even if erasing alpha from module i made {}, remain null module i,
-// // which is removed in next process (re-indexing)
-// void update_community(vector<vector<int>> &community, vector<int> &n2c, int alpha, int j)
-// {
-// 	// move alpha from module i to j
-// 	int i = n2c[alpha];
-// 	int alpha_index;
-// 	for (int index = 0; index < community[i].size(); index++)
-// 	{
-// 		if (community[i][index] == alpha)
-// 			alpha_index = index;
-// 	}
-// 	community[i].erase(community[i].begin() + alpha_index);
-// 	community[j].push_back(alpha);
-// 	// add alpha to module j
-// 	n2c[alpha] = j;
-// 	return;
-// }
-
-// // community: return new community
-// // n2c: overwrite
-// vector<vector<int>> re_index(vector<vector<int>> &community, vector<int> &n2c)
-// {
-// 	// get unique community indices
-// 	vector<int> unq(n2c);
-// 	sort(unq.begin(), unq.end());
-// 	unq.erase(unique(unq.begin(), unq.end()), unq.end());
-// 	// make a comunity index mapper (old -> new)
-// 	map<int, int> old2new;
-// 	for (int i = 0; i < unq.size(); i++)
-// 	{
-// 		old2new[unq[i]] = i;
-// 	}
-// 	// re-index node-community assignment
-// 	for (int i = 0; i < n2c.size(); i++)
-// 	{
-// 		n2c[i] = old2new[n2c[i]];
-// 	}
-// 	// re-index modules
-// 	vector<vector<int>> new_community;
-// 	for (auto &i : unq)
-// 	{
-// 		new_community.push_back(community[i]);
-// 	}
-// 	return new_community;
-// }
-
-// // to find optimal community at each level
-// Community get_optimal_community(Community &C, int seed = 1)
-// {
-// 	int N = C.N;
-// 	vector<vector<int>> community = C.community;
-// 	vector<int> n2c = C.n2c;
-
-// 	// set random generator
-// 	mt19937 mt(seed);
-// 	// node indices for shuffling
-// 	vector<int> nodes(N);
-// 	for (int alpha = 0; alpha < N; alpha++)
-// 	{
-// 		nodes[alpha] = alpha;
-// 	}
-
-// 	// iteration
-// 	int T = N; // max iteration counts
-// 	double total_delta_L = 0;
-// 	int convergence_counter = 0;
-// 	for (int t = 0; t < T; t++)
-// 	{
-// 		// cout << "t = " << t << endl;
-// 		double all_delta_L = 0;
-// 		shuffle(nodes.begin(), nodes.end(), mt);
-// 		for (auto &alpha : nodes)
-// 		{
-// 			// optimiation
-// 			tuple<int, double, CodeLength> opt = get_optimal_target_module(C, alpha);
-// 			int j = get<0>(opt);
-// 			double delta_L = get<1>(opt);
-// 			CodeLength code = get<2>(opt);
-// 			// printf("optimization: alpha = %d, j = %d / delta_L = %:.3f\n", alpha, j, delta_L);
-// 			// update community assignment and codelength
-// 			if (delta_L > 0)
-// 			{
-// 				// printf("optimization: alpha = %d, j = %d / delta_L = %:.3f\n", alpha, j, delta_L);
-// 				update_community(community, n2c, alpha, j);
-// 				C.community = community;
-// 				C.n2c = n2c;
-// 				C.code = code;
-// 				// // debug
-// 				// int precision = 3;
-// 				// cout << "\e[0;32m  updated community = \e[0m";
-// 				// print_community(C.community, '\n');
-// 				// cout << "\e[0;32m  updated qs = \e[0m";
-// 				// print_vector(C.code.qs_, '\n', precision);
-// 				// cout << "\e[0;32m  updated ps = \e[0m";
-// 				// print_vector(C.code.ps_, '\n', precision);
-// 				// printf("\e[0;32m  L = \e[0m%1.3f\n", C.code.L);
-// 			}
-// 			all_delta_L += delta_L;
-// 		}
-// 		total_delta_L += all_delta_L;
-// 		// at convergence
-// 		if (all_delta_L == 0)
-// 		{
-// 			if (convergence_counter++ > 5)
-// 			{
-// 				// cout << "total steps to get optimal commmunity: " << t << endl;
-// 				break;
-// 			}
-// 		}
-// 	}
-
-// 	// re-index community
-// 	vector<vector<int>> new_community = re_index(community, n2c);
-// 	cout << "n2c = ";
-// 	print_vector(n2c);
-
-// 	if (total_delta_L > 0)
-// 		return Community(C.nadj_inflows_, C.nodeFlow, C.tau, new_community, n2c);
-// 	else
-// 		return Community();
-// }
+	if (total_delta_L > 0)
+		return Community(C.nadj_inflows_, C.nodeFlow, C.tau, new_community, n2c);
+	else
+		return Community();
+}
 
 // vector<vector<Flow>> get_agg_outflows(vector<vector<Flow>> &flows, vector<vector<int>> &community, vector<int> &n2c)
 // {
@@ -1008,7 +888,7 @@ void test_4()
 	// cout << "\e[0;32m  init ps = \e[0m";
 	// print_vector(C.code.ps_, '\n', precision);
 	double L0 = C.code.L;
-	double dL0 = get_delta_L(C, 3, 3, 2);
+	double dL0 = get_deltaCodeLength(C, 3, 3, 2);
 	printf("\e[0;32m  L0 = \e[0m%1.3f\n", -L0);
 	printf("\e[0;32m  dL0 = \e[0m%1.3f\n", dL0);
 	// printf("\e[0;32m  L = \e[0m%1.3f\n", -C.code.L / log(2));
@@ -1025,7 +905,7 @@ void test_4()
 	print_community(init_community, '\n');
 	C = Community(links, tau, init_community);
 	double L2 = C.code.L;
-	double dL2 = get_delta_L(C, 3, 1, 0);
+	double dL2 = get_deltaCodeLength(C, 3, 1, 0);
 	printf("\e[0;32m  L2 = \e[0m%1.3f\n", -L2);
 	printf("\e[0;32m  dL2 = \e[0m%1.3f\n", dL2);
 
