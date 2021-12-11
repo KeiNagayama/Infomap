@@ -240,6 +240,7 @@ double get_dangling_sum(vector<double> &v, vector<int> &dangling_nodes)
 	return s;
 }
 
+// to calculate teleportation rate for each node
 // outflows[i] = w_i^{out}
 // total_outflow = W
 vector<double> get_teleportation_rate(vector<double> &total_outflows, double sum_outflow)
@@ -252,7 +253,7 @@ vector<double> get_teleportation_rate(vector<double> &total_outflows, double sum
 	return teleportation_rate;
 }
 
-struct FlowSet
+struct FlowData
 {
 	vector<vector<Flow>> adj_outflows_;
 	vector<vector<Flow>> adj_inflows_;
@@ -261,7 +262,7 @@ struct FlowSet
 	vector<int> dangling_nodes_;
 	vector<double> teleportation_rate_;
 	// construtor
-	FlowSet(
+	FlowData(
 		vector<vector<Flow>> &adj_outflows,
 		vector<vector<Flow>> &adj_inflows,
 		vector<vector<Flow>> &nadj_outflows,
@@ -271,7 +272,7 @@ struct FlowSet
 };
 
 // weighted total_outflows
-FlowSet get_flowset(vector<Link> &links, int N)
+FlowData get_flowdata(vector<Link> &links, int N)
 {
 	vector<double> total_outflows(N, 0);
 	double sum_outflow = 0;
@@ -310,7 +311,7 @@ FlowSet get_flowset(vector<Link> &links, int N)
 	}
 	vector<int> dangling_nodes = get_dangling_nodes(total_outflows);
 	vector<double> teleportation_rate = get_teleportation_rate(total_outflows, sum_outflow);
-	return FlowSet(adj_outflows, adj_inflows, nadj_outflows, nadj_inflows, dangling_nodes, teleportation_rate);
+	return FlowData(adj_outflows, adj_inflows, nadj_outflows, nadj_inflows, dangling_nodes, teleportation_rate);
 }
 
 // to calculate pagerank with unrecorded link teleportation
@@ -593,11 +594,11 @@ struct Community
 	Community(vector<Link> &weighted_links, double tau) : tau_(tau)
 	{
 		this->N_ = get_N(weighted_links);
-		FlowSet flowset = get_flowset(weighted_links, this->N_);
-		this->nadj_inflows_ = flowset.nadj_inflows_;
-		this->nadj_outflows_ = flowset.nadj_outflows_;
-		// this->dangling_nodes_ = flowset.dangling_nodes_;
-		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, flowset.dangling_nodes_, flowset.teleportation_rate_, tau);
+		FlowData flowdata = get_flowdata(weighted_links, this->N_);
+		this->nadj_inflows_ = flowdata.nadj_inflows_;
+		this->nadj_outflows_ = flowdata.nadj_outflows_;
+		// this->dangling_nodes_ = flowdata.dangling_nodes_;
+		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, flowdata.dangling_nodes_, flowdata.teleportation_rate_, tau);
 		this->community_ = get_init_partition(this->N_);
 		this->n2c_ = get_n2c(this->N_, this->community_);
 		this->code_ = get_code_length(this->nadj_inflows_, this->pagerank_, tau, this->community_, this->n2c_);
@@ -606,11 +607,11 @@ struct Community
 	Community(vector<Link> &weighted_links, double tau, vector<vector<int>> &community) : tau_(tau), community_(community)
 	{
 		this->N_ = get_N(weighted_links);
-		FlowSet flowset = get_flowset(weighted_links, this->N_);
-		this->nadj_inflows_ = flowset.nadj_inflows_;
-		this->nadj_outflows_ = flowset.nadj_outflows_;
-		// this->dangling_nodes_ = flowset.dangling_nodes_;
-		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, flowset.dangling_nodes_, flowset.teleportation_rate_, tau);
+		FlowData flowdata = get_flowdata(weighted_links, this->N_);
+		this->nadj_inflows_ = flowdata.nadj_inflows_;
+		this->nadj_outflows_ = flowdata.nadj_outflows_;
+		// this->dangling_nodes_ = flowdata.dangling_nodes_;
+		this->pagerank_ = get_pagerank(this->N_, this->nadj_inflows_, flowdata.dangling_nodes_, flowdata.teleportation_rate_, tau);
 		this->n2c_ = get_n2c(this->N_, community);
 		this->code_ = get_code_length(this->nadj_inflows_, this->pagerank_, tau, community, this->n2c_);
 	}
