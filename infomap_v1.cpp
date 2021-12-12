@@ -8,9 +8,7 @@
 #include <fstream>
 #include <vector>
 #include <map>
-#include <tuple>
 #include <random>
-#include <utility>
 #include <cmath>
 #include <algorithm>
 #include <cassert>
@@ -232,11 +230,6 @@ vector<double> get_pagerank(int N, vector<Link> &nlinks, vector<int> &dangling_n
 	vector<double> pagerank = teleportation_rate;
 	vector<double> pagerank_last = teleportation_rate;
 
-	// cout << "  #dangling nodes = " << dangling_nodes.size() << endl;
-	// cout << "  teleportation rate = ";
-	// print_vector(teleportation_rate);
-	cout << endl;
-
 	// iteration by power method
 	int t = 0;
 	for (int t = 0; t < T; t++)
@@ -292,8 +285,6 @@ FlowData get_flowdata(vector<Link> &links, int N)
 	vector<int> dangling_nodes = get_dangling_nodes(outflows);
 	vector<double> teleportation_rate = get_teleportation_rate(outflows, total_outflow);
 	vector<double> pagerank = get_pagerank(N, nlinks, dangling_nodes, teleportation_rate);
-	// cout << "  pagerank = ";
-	// print_vector(pagerank, '\n');
 
 	// to calculate final flows
 	vector<Link> linkFlows = nlinks;
@@ -403,19 +394,6 @@ CodeLength get_codelength(int N, vector<Link> &linkFlows, vector<double> &nodeFl
 
 	// to sum up codeLength
 	double codeLength = moduleCodeLength + sum(indexCodeLength);
-
-	// cout << "  indexCodeLength = ";
-	// print_vector(indexCodeLength);
-	// cout << ", " << sum(indexCodeLength) << endl;
-	// cout << "  moduleCodeLength = " << moduleCodeLength << endl;
-	// cout << "  nodeFlow = ";
-	// print_vector(nodeFlows, '\n');
-	// cout << "  exitFlow = ";
-	// print_vector(exitFlows, '\n');
-	// cout << "  enterFlow = ";
-	// print_vector(enterFlows, '\n');
-	// cout << "  linkFlows = " << endl;
-	// print_link(linkFlows);
 
 	return CodeLength(codeLength, moduleCodeLength, indexCodeLength, enterFlows, exitFlows, totalFlows);
 }
@@ -563,42 +541,6 @@ get_deltaCodeLength(Community &C, int gamma, int sourceModule, int targetModule)
 	double delta_indexCodeLength = delta_source_indexCodeLength + delta_target_indexCodeLength;
 	double delta_codeLength = delta_moduleCodeLength + delta_indexCodeLength;
 
-	// cout << "--------------------------" << endl;
-	// cout << "delta_source_enterFlow = " << delta_source_enterFlow << endl;
-	// cout << "delta_source_exitFlow  = " << delta_source_exitFlow << endl;
-	// cout << "delta_target_enterFlow = " << delta_target_enterFlow << endl;
-	// cout << "delta_target_exitFlow  = " << delta_target_exitFlow << endl;
-
-	// cout << "--------------------------" << endl;
-	// cout << "old_sumEnter = " << old_sumEnter << endl;
-	// cout << "new_sumEnter = " << new_sumEnter << endl;
-	// cout << "delta_sumEnter_log_sumEnter = " << delta_sumEnter_log_sumEnter << endl;
-
-	// cout << "--------------------------" << endl;
-	// cout << "old_source_enterFlow = " << old_source_enterFlow << endl;
-	// cout << "old_source_exitFlow  = " << old_source_exitFlow << endl;
-	// cout << "old_target_enterFlow = " << old_target_enterFlow << endl;
-	// cout << "old_target_exitFlow  = " << old_target_exitFlow << endl;
-	// cout << "new_source_enterFlow = " << new_source_enterFlow << endl;
-	// cout << "new_source_exitFlow  = " << new_source_exitFlow << endl;
-	// cout << "new_target_enterFlow = " << new_target_enterFlow << endl;
-	// cout << "new_target_exitFlow  = " << new_target_exitFlow << endl;
-
-	// cout << "--------------------------" << endl;
-	// cout << "delta_source_enter_log_enter = " << delta_source_enter_log_enter << endl;
-	// cout << "delta_source_exit_log_exit   = " << delta_source_exit_log_exit << endl;
-	// cout << "delta_source_total_log_total = " << delta_source_total_log_total << endl;
-	// cout << "delta_target_enter_log_enter = " << delta_target_enter_log_enter << endl;
-	// cout << "delta_target_exit_log_exit   = " << delta_target_exit_log_exit << endl;
-	// cout << "delta_target_total_log_total = " << delta_target_total_log_total << endl;
-
-	// cout << "--------------------------" << endl;
-	// cout << "delta_moduleCodeLength = " << delta_moduleCodeLength << endl;
-	// cout << "delta_indexCodeLength = " << delta_indexCodeLength << endl;
-	// cout << "delta_codeLength = " << delta_codeLength << endl;
-
-	// cout << "--------------------------" << endl;
-
 	double new_codeLength = C.code.L + delta_codeLength;
 	double new_moduleCodeLength = C.code.moduleCodeLength + delta_moduleCodeLength;
 	vector<double> new_indexCodeLength = C.code.indexCodeLength;
@@ -737,21 +679,6 @@ void get_optimal_community(Community &C, int seed = 1)
 		cout << "t = " << t << ", N_delta_L = " << N_delta_L << endl;
 
 		total_delta_L += N_delta_L;
-
-		// int gamma = gen_int(mt);
-
-		// // optimiation
-		// DeltaCodeLength opt = get_optimal_target_module(C, gamma);
-		// int j = opt.targetModule;
-		// double delta_L = opt.delta_codeLength;
-		// CodeLength new_code = opt.new_code;
-		// // update community assignment and codelength
-		// if (delta_L > 0)
-		// {
-		// 	update_community(community, n2c, gamma, j);
-		// 	C.code = new_code;
-		// }
-		// total_delta_L += delta_L;
 
 		// at convergence
 		if (N_delta_L < 1e-15)
@@ -961,6 +888,8 @@ void test_4()
 
 void test_lfr()
 {
+	// string graph_name = "graphs/lfr250.txt";
+	// self-loopありだと単一ノードが出てくる
 	string graph_name = "graphs/lfr250_2.txt";
 	cout << "========================================" << endl;
 	cout << "test for " << graph_name << endl;
