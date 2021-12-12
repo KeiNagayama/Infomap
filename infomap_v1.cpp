@@ -91,16 +91,6 @@ void DivideVectorByScaler(vector<double> &v, double x)
 	return;
 }
 
-vector<double> slice_vector_by_indices(vector<double> &v, vector<int> indicies)
-{
-	vector<double> v1;
-	for (auto &id : indicies)
-	{
-		v1.push_back(v[id]);
-	}
-	return v1;
-}
-
 double l1_norm(vector<double> &x, vector<double> &y)
 {
 	double d = 0;
@@ -203,6 +193,7 @@ vector<double> get_teleportation_rate(vector<double> &total_outflows, double sum
 
 struct FlowData
 {
+	vector<Link> links;
 	vector<Link> nlinks;
 	vector<Link> linkFlows;
 	vector<vector<Link>> adj_outLinkFlows; // adjacency list of outlinkFlows
@@ -211,12 +202,13 @@ struct FlowData
 	// construtor
 	FlowData(){};
 	FlowData(
+		vector<Link> &links,
 		vector<Link> &nlinks,
 		vector<Link> &linkFlows,
 		vector<vector<Link>> &adj_outLinkFlows,
 		vector<vector<Link>> &adj_inLinkFlows,
 		vector<double> &nodeFlows)
-		: nlinks(nlinks),
+		: links(links), nlinks(nlinks),
 		  linkFlows(linkFlows),
 		  adj_outLinkFlows(adj_outLinkFlows),
 		  adj_inLinkFlows(adj_inLinkFlows),
@@ -224,7 +216,7 @@ struct FlowData
 };
 
 // to calculate pagerank with unrecorded link teleportation
-vector<double> get_pagerank(int N, vector<Link> &nlinks, vector<int> &dangling_nodes, vector<double> &teleportation_rate, double tau = 0.15, int T = 100000, double EPS = 1e-6)
+vector<double> get_pagerank(int N, vector<Link> &nlinks, vector<int> &dangling_nodes, vector<double> &teleportation_rate, double tau = 0.15, int T = 100)
 {
 	// initialization
 	vector<double> pagerank = teleportation_rate;
@@ -250,7 +242,7 @@ vector<double> get_pagerank(int N, vector<Link> &nlinks, vector<int> &dangling_n
 			pagerank[beta] += (1 - tau) * w * pagerank_last[alpha];
 		}
 		// check convergence
-		if (l1_norm(pagerank, pagerank_last) < EPS)
+		if (l1_norm(pagerank, pagerank_last) < 1e-15)
 		{
 			cout << "  total steps to converge: " << t << " (converged)" << endl;
 			return pagerank;
@@ -299,7 +291,7 @@ FlowData get_flowdata(vector<Link> &links, int N)
 		adj_inLinkFlows[linkFlow.target].push_back(linkFlow);
 		nodeFlows[linkFlow.target] += flow;
 	}
-	return FlowData(nlinks, linkFlows, adj_outLinkFlows, adj_inLinkFlows, nodeFlows);
+	return FlowData(links, nlinks, linkFlows, adj_outLinkFlows, adj_inLinkFlows, nodeFlows);
 }
 
 struct CodeLength
@@ -424,10 +416,10 @@ struct Community
 		this->n2c = get_n2c(this->N, community);
 		this->code = get_codelength(this->N, this->flowdata.linkFlows, this->flowdata.nodeFlows, tau, community, this->n2c);
 	};
-	// bool isNull()
-	// {
-	// 	return this->N == 0;
-	// };
+	bool isNull()
+	{
+		return this->N == 0;
+	};
 };
 
 void print_community(vector<vector<int>> &community, char br = '\0')
@@ -676,7 +668,7 @@ void get_optimal_community(Community &C, int seed = 1)
 			N_delta_L += delta_L;
 		}
 
-		cout << "t = " << t << ", N_delta_L = " << N_delta_L << endl;
+		cout << "  t = " << t << ", N_delta_L = " << setprecision(3) << N_delta_L << endl;
 
 		total_delta_L += N_delta_L;
 
@@ -685,7 +677,7 @@ void get_optimal_community(Community &C, int seed = 1)
 		{
 			if (convergence_counter++ > 3)
 			{
-				cout << "total steps to get optimal commmunity: " << t << endl;
+				cout << "  total steps to get optimal commmunity: " << t << endl;
 				break;
 			}
 		}
@@ -697,109 +689,67 @@ void get_optimal_community(Community &C, int seed = 1)
 
 	// re-index community
 	re_index(community, n2c);
-	cout << "n2c = ";
-	print_vector(n2c);
 
 	if (total_delta_L < 1e-15)
 		C = Community();
 }
 
-// vector<vector<Flow>> get_agg_outflows(vector<vector<Flow>> &flows, vector<vector<int>> &community, vector<int> &n2c)
-// {
-// 	cout << "call get aggregated flows" << endl;
-// 	int N = community.size();
-// 	vector<vector<Flow>> agg_outflows(N);
-// 	for (int i = 0; i < N; i++)
-// 	{
-// 		vector<double> agg_outflows_i_tmp(N, 0);
-// 		for (auto alpha : community[i])
-// 		{
-// 			for (auto &flow : flows[alpha])
-// 			{
-// 				int j = n2c[flow.first];
-// 				double w = flow.second;
-// 				agg_outflows_i_tmp[j] += w;
-// 			}
-// 		}
-// 		// normalize
-// 		double s = 0;
-// 		for (auto w : agg_outflows_i_tmp)
-// 		{
-// 			s += w;
-// 		}
-// 		for (int j = 0; j < N; j++)
-// 		{
-// 			double w = agg_outflows_i_tmp[j];
-// 			if (w > 0)
-// 				agg_outflows[i].push_back(make_pair(j, w / s));
-// 		}
-// 	}
-// 	cout << "end get aggregated flows" << endl;
-// 	return agg_outflows;
-// }
+vector<Link> get_aggregated_links(vector<Link> &links, vector<vector<int>> &community, vector<int> &n2c)
+{
+	// aggregate links
+	int NC = community.size();
+	vector<vector<double>> agg_mat(NC, vector<double>(NC, 0));
+	for (auto &link : links)
+	{
+		int source = n2c[link.source];
+		int target = n2c[link.target];
+		// if (source != target) // remove self-loops
+		agg_mat[source][target] += link.weight;
+	}
+	vector<Link> agg_links;
+	for (int i = 0; i < NC; i++)
+	{
+		vector<double> &agg_row = agg_mat[i];
+		for (int j = 0; j < NC; j++)
+		{
+			double w = agg_row[j];
+			if (w > 0)
+			{
+				agg_links.push_back(Link(i, j, w));
+			}
+		}
+	}
 
-// Community get_aggregated_community(Community C)
-// {
-// 	cout << "call get aggregated community" << endl;
-// 	// get C elements
-// 	double tau = C.tau;
-// 	vector<vector<int>> community = C.community;
-// 	vector<int> n2c = C.n2c;
-// 	CodeLength code = C.code;
+	return agg_links;
+}
 
-// 	int N = community.size();
-// 	vector<vector<Flow>> aggregated_nadj_inflows = get_agg_outflows(C.nadj_inflows_, community, n2c);
-// 	vector<double> aggregated_pagerank = code.qs_;
-// 	// assing individual community to each (aggregated) node
-// 	vector<vector<int>> agg_community(N);
-// 	for (int i = 0; i < N; i++)
-// 	{
-// 		agg_community[i] = {i};
-// 	}
-// 	vector<int> agg_n2c = get_n2c(N, agg_community);
+Community get_aggregated_community(Community &C)
+{
+	vector<Link> agg_links = get_aggregated_links(C.flowdata.links, C.community, C.n2c);
+	return Community(agg_links, C.tau);
+}
 
-// 	cout << "end get aggregated community" << endl;
+vector<Community> recursive_search(vector<Link> &links, double tau, int maxDepth = 20)
+{
+	vector<Community> multilevel_C;
+	cout << "  [0] initialization" << endl;
+	Community C = Community(links, tau);
 
-// 	return Community(aggregated_nadj_inflows, aggregated_pagerank, tau, agg_community, agg_n2c);
-// }
+	for (int i = 0; i < maxDepth; i++)
+	{
+		cout << "  [1] optimization" << endl;
+		get_optimal_community(C);
+		if (C.isNull())
+			break;
 
-// vector<Community> recursive_search(vector<Link> links, double tau)
-// {
-// 	vector<Community> multilevel_C;
-// 	cout << "initialization" << endl;
-// 	Community agg_C = initialization(links, tau);
-// 	cout << "optimization" << endl;
-// 	Community opt_C = get_optimal_community(agg_C);
-// 	cout << "push C" << endl;
-// 	multilevel_C.push_back(opt_C);
-// 	while (!opt_C.isNull())
-// 	{
-// 		cout << "aggregation" << endl;
-// 		agg_C = get_aggregated_community(opt_C);
-// 		cout << "optimization" << endl;
-// 		opt_C = get_optimal_community(agg_C);
-// 		multilevel_C.push_back(opt_C);
-// 	}
-// 	// reverse(multilevel_C.begin(), multilevel_C.end());
-// 	return multilevel_C;
-// }
-
-// vector<Community> find_community(vector<Link> links, double tau)
-// {
-// 	return recursive_search(links, tau);
-// }
-
-// void print_multilevel_community(vector<Community> &MC)
-// {
-// 	cout << "{";
-// 	for (int i = 0; i < MC.size() - 1; i++)
-// 	{
-// 		print_community(MC[i].community, '\n');
-// 	}
-// 	print_community(MC.back().community);
-// 	cout << "}" << endl;
-// 	return;
-// }
+		// push and aggregate
+		multilevel_C.push_back(C);
+		cout << "  [2] aggregation" << endl;
+		C = get_aggregated_community(C);
+	}
+	cout << "  [3] finished recursive search" << endl;
+	return multilevel_C;
+}
 
 void test_4()
 {
@@ -838,6 +788,7 @@ void test_4()
 	C = Community(links, tau, init_community);
 	double L1 = C.code.L;
 	printf("\e[0;32m  L1 = \e[0m%1.3f\n", -L1);
+	assert(abs(L0 + dL0 - L1) < 1e-15);
 
 	init_community = {{0, 1, 2}, {3}};
 	cout << "\e[0;32m  init community = \e[0m";
@@ -854,6 +805,7 @@ void test_4()
 	C = Community(links, tau, init_community);
 	double L3 = C.code.L;
 	printf("\e[0;32m  L3 = \e[0m%1.3f\n", -L3);
+	assert(abs(L2 + dL2 - L3) < 1e-15);
 
 	// ==========================================================
 	// test for get optimal community
@@ -884,6 +836,59 @@ void test_4()
 	// print_multilevel_community(MC);
 
 	return;
+}
+
+void test_4dir()
+{
+	string graph_name = "graphs/4directed.txt";
+	cout << "========================================" << endl;
+	cout << "test for " << graph_name << endl;
+
+	vector<Link> links = read_links(graph_name);
+	double tau = 0.15;
+
+	vector<Community> MC = recursive_search(links, tau);
+	cout << "depth = " << MC.size() << endl;
+	for (auto &C : MC)
+	{
+		print_community(C.community, '\n');
+		cout << "pagerank = ";
+		print_vector(C.flowdata.nodeFlows, '\n');
+	}
+}
+
+void test_27()
+{
+	string graph_name = "graphs/27.txt";
+	cout << "========================================" << endl;
+	cout << "test for " << graph_name << endl;
+
+	vector<Link> links = read_links(graph_name);
+	double tau = 0.15;
+
+	vector<Community> MC = recursive_search(links, tau);
+	cout << "depth = " << MC.size() << endl;
+	for (auto &C : MC)
+	{
+		print_community(C.community, '\n');
+	}
+}
+
+void test_97()
+{
+	string graph_name = "graphs/USAir97_edges_reindexed.txt";
+	cout << "========================================" << endl;
+	cout << "test for " << graph_name << endl;
+
+	vector<Link> links = read_links(graph_name);
+	double tau = 0.15;
+
+	vector<Community> MC = recursive_search(links, tau);
+	cout << "depth = " << MC.size() << endl;
+	for (auto &C : MC)
+	{
+		print_community(C.community, '\n');
+	}
 }
 
 void test_lfr()
@@ -925,26 +930,14 @@ void test_lfr()
 			cout << endl;
 		}
 	}
-
-	// chech correspondence with api
-	// vector<vector<int>> community = {{1, 7, 13, 14, 20, 23, 24, 27, 28, 29, 31, 33, 37, 38, 39, 40, 46, 54, 55, 58, 62, 69, 71, 72, 75, 76, 78, 80, 83, 86, 90, 91, 96, 102, 103, 106, 107, 109, 113, 114, 116, 117, 120, 125, 128, 132, 135, 152, 153, 160, 165, 166, 168, 169, 177, 181, 182, 188, 192, 194, 202, 204, 205, 217, 228, 235, 240, 243, 244, 247, 248, 249}, {0, 2, 3, 4, 5, 6, 9, 10, 11, 15, 17, 25, 26, 30, 32, 35, 36, 41, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 56, 57, 59, 60, 63, 64, 66, 67, 68, 73, 74, 77, 79, 81, 82, 85, 87, 88, 89, 92, 93, 94, 95, 97, 98, 99, 100, 101, 104, 105, 108, 110, 111, 112, 115, 118, 119, 121, 122, 123, 124, 126, 127, 129, 131, 133, 134, 136, 137, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 159, 161, 162, 163, 164, 167, 170, 171, 172, 173, 175, 176, 178, 179, 184, 185, 187, 189, 190, 191, 193, 195, 196, 197, 198, 199, 200, 201, 203, 206, 207, 208, 210, 212, 213, 214, 215, 216, 218, 219, 220, 221, 222, 223, 224, 225, 226, 229, 230, 231, 232, 233, 234, 236, 237, 238, 239, 241, 242, 245, 246}, {8, 12, 16, 18, 19, 21, 22, 34, 61, 65, 70, 84, 130, 138, 174, 180, 183, 186, 209, 211, 227}};
-
-	// Community C = Community(links, tau, community);
-	// cout << "n2c = ";
-	// print_vector(C.n2c);
-	// printf(", ground L = %1.3f\n", C.code.L / log(2));
 }
 
 int main(int argc, char *argv[])
 {
-	// test_L();
-	// test_3(); // all test passed!! (for one-layer search)
 	// test_4();
-	// test_27();
-	// test_3_1();
+	// test_4dir();
+	test_27();
 	// test_97();
-	test_lfr();
-	// test_entropy();
-	// test_plogp();
+	// test_lfr();
 	return 0;
 }
