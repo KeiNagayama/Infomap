@@ -628,7 +628,7 @@ get_optimal_target_module(Community &C, int gamma)
 	int sourceModule = n2c[gamma];
 	int opt_targetModule = sourceModule;
 	double opt_delta_L = 0;
-	DeltaCodeLength opt_deltaCodeLength = DeltaCodeLength();
+	DeltaCodeLength opt_deltaCodeLength = DeltaCodeLength(sourceModule, 0, C.code);
 
 	for (auto &outflow : C.flowdata.adj_outLinkFlows[gamma])
 	{
@@ -703,6 +703,11 @@ void get_optimal_community(Community &C, int seed = 1)
 	// set random generator
 	mt19937 mt(seed);
 	uniform_int_distribution<> gen_int(0, N - 1);
+	vector<int> nodes(N);
+	for (int alpha = 0; alpha < N; alpha++)
+	{
+		nodes[alpha] = alpha;
+	}
 
 	// iteration
 	int T = N * N; // max iteration counts
@@ -710,42 +715,56 @@ void get_optimal_community(Community &C, int seed = 1)
 	int convergence_counter = 0;
 	for (int t = 0; t < T; t++)
 	{
-		// cout << "t = " << t << endl;
-		int gamma = gen_int(mt);
+		double N_delta_L = 0;
+		shuffle(nodes.begin(), nodes.end(), mt);
 
-		// optimiation
-		DeltaCodeLength opt = get_optimal_target_module(C, gamma);
-		int j = opt.targetModule;
-		double delta_L = opt.delta_codeLength;
-		CodeLength new_code = opt.new_code;
-		// update community assignment and codelength
-		if (delta_L > 0)
+		for (auto &gamma : nodes)
 		{
-			// printf("optimization: gamma = %d, j = %d / delta_L = %:.3f\n", gamma, j, delta_L);
-			update_community(community, n2c, gamma, j);
-			// print_vector(n2c, '\n');
-			// C.community = community;
-			// C.n2c = n2c;
-			C.code = new_code;
-			// // debug
-			// int precision = 3;
-			// cout << "\e[0;32m  updated community = \e[0m";
-			// print_community(C.community, '\n');
-			// cout << "\e[0;32m  updated qs = \e[0m";
-			// print_vector(C.code.qs_, '\n', precision);
-			// cout << "\e[0;32m  updated ps = \e[0m";
-			// print_vector(C.code.ps_, '\n', precision);
-			// printf("\e[0;32m  L = \e[0m%1.3f\n", C.code.L);
+			// optimiation
+			DeltaCodeLength opt = get_optimal_target_module(C, gamma);
+			int j = opt.targetModule;
+			double delta_L = opt.delta_codeLength;
+			CodeLength new_code = opt.new_code;
+			// update community assignment and codelength
+			if (delta_L > 0)
+			{
+				update_community(community, n2c, gamma, j);
+				C.code = new_code;
+			}
+			N_delta_L += delta_L;
 		}
-		total_delta_L += delta_L;
+
+		cout << "t = " << t << ", N_delta_L = " << N_delta_L << endl;
+
+		total_delta_L += N_delta_L;
+
+		// int gamma = gen_int(mt);
+
+		// // optimiation
+		// DeltaCodeLength opt = get_optimal_target_module(C, gamma);
+		// int j = opt.targetModule;
+		// double delta_L = opt.delta_codeLength;
+		// CodeLength new_code = opt.new_code;
+		// // update community assignment and codelength
+		// if (delta_L > 0)
+		// {
+		// 	update_community(community, n2c, gamma, j);
+		// 	C.code = new_code;
+		// }
+		// total_delta_L += delta_L;
+
 		// at convergence
-		if (total_delta_L < 1e-15)
+		if (N_delta_L < 1e-15)
 		{
-			if (convergence_counter++ > N)
+			if (convergence_counter++ > 3)
 			{
 				cout << "total steps to get optimal commmunity: " << t << endl;
 				break;
 			}
+		}
+		else if (convergence_counter > 0)
+		{
+			convergence_counter = 0;
 		}
 	}
 
@@ -942,7 +961,7 @@ void test_4()
 
 void test_lfr()
 {
-	string graph_name = "graphs/lfr250.txt";
+	string graph_name = "graphs/lfr250_2.txt";
 	cout << "========================================" << endl;
 	cout << "test for " << graph_name << endl;
 
@@ -953,7 +972,7 @@ void test_lfr()
 
 	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
 	double tau = 0.15;
-	int seed = 4;
+	int seed = 3;
 
 	Community opt_C = Community(links, tau);
 	printf(", init L = %1.3f\n", opt_C.code.L / log(2));
@@ -961,6 +980,22 @@ void test_lfr()
 	printf(", L = %1.3f\n", opt_C.code.L / log(2));
 	print_community(opt_C.community, '\n');
 	cout << "NC = " << opt_C.community.size() << endl;
+
+	for (int i = 0; i < opt_C.community.size(); i++)
+	{
+		if (opt_C.community[i].size() == 1)
+		{
+			int gamma = opt_C.community[i][0];
+			DeltaCodeLength t = get_optimal_target_module(opt_C, gamma);
+			printf("gamma = %d, module %d -> %d, dL = %1.3f\n", gamma, opt_C.n2c[gamma], t.targetModule, t.delta_codeLength);
+			cout << "adj:";
+			for (auto &outFlow : opt_C.flowdata.adj_outLinkFlows[gamma])
+			{
+				cout << " " << outFlow.target;
+			}
+			cout << endl;
+		}
+	}
 
 	// chech correspondence with api
 	// vector<vector<int>> community = {{1, 7, 13, 14, 20, 23, 24, 27, 28, 29, 31, 33, 37, 38, 39, 40, 46, 54, 55, 58, 62, 69, 71, 72, 75, 76, 78, 80, 83, 86, 90, 91, 96, 102, 103, 106, 107, 109, 113, 114, 116, 117, 120, 125, 128, 132, 135, 152, 153, 160, 165, 166, 168, 169, 177, 181, 182, 188, 192, 194, 202, 204, 205, 217, 228, 235, 240, 243, 244, 247, 248, 249}, {0, 2, 3, 4, 5, 6, 9, 10, 11, 15, 17, 25, 26, 30, 32, 35, 36, 41, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 56, 57, 59, 60, 63, 64, 66, 67, 68, 73, 74, 77, 79, 81, 82, 85, 87, 88, 89, 92, 93, 94, 95, 97, 98, 99, 100, 101, 104, 105, 108, 110, 111, 112, 115, 118, 119, 121, 122, 123, 124, 126, 127, 129, 131, 133, 134, 136, 137, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 159, 161, 162, 163, 164, 167, 170, 171, 172, 173, 175, 176, 178, 179, 184, 185, 187, 189, 190, 191, 193, 195, 196, 197, 198, 199, 200, 201, 203, 206, 207, 208, 210, 212, 213, 214, 215, 216, 218, 219, 220, 221, 222, 223, 224, 225, 226, 229, 230, 231, 232, 233, 234, 236, 237, 238, 239, 241, 242, 245, 246}, {8, 12, 16, 18, 19, 21, 22, 34, 61, 65, 70, 84, 130, 138, 174, 180, 183, 186, 209, 211, 227}};
