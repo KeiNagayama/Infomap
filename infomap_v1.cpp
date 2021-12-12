@@ -37,20 +37,6 @@ struct Link
 	Link(int source, int target, int weight) : source(source), target(target), weight(weight){};
 };
 
-void print_link(vector<Link> &links, int precision = 2)
-{
-	if (links.size() == 0)
-	{
-		cout << "{}" << endl;
-		return;
-	}
-	for (auto &link : links)
-	{
-		cout << link.source << " " << link.target << " " << setprecision(precision) << link.weight << endl;
-	}
-	return;
-}
-
 // to read directed links from a text file
 vector<Link> read_links(string fname, bool directed = true, bool use_weight = true)
 {
@@ -80,15 +66,6 @@ double sum(vector<double> &v)
 		s += x;
 	}
 	return s;
-}
-
-void DivideVectorByScaler(vector<double> &v, double x)
-{
-	for (int i = 0; i < v.size(); i++)
-	{
-		v[i] /= x;
-	}
-	return;
 }
 
 double l1_norm(vector<double> &x, vector<double> &y)
@@ -144,16 +121,6 @@ vector<double> get_total_outflows(vector<Link> &links, int N)
 double plogp(double p, double EPS = 1e-15)
 {
 	return (abs(p) < EPS) ? 0 : p * log(p) / log(2);
-}
-
-double entropy(vector<double> &ps, double EPS = 1e-15)
-{
-	double h = 0;
-	for (auto &p : ps)
-	{
-		h += plogp(p, EPS);
-	}
-	return h;
 }
 
 vector<int> get_dangling_nodes(vector<double> &total_outflow)
@@ -434,12 +401,6 @@ void print_community(vector<vector<int>> &community, char br = '\0')
 	return;
 }
 
-// delta(plogp)
-double delta_plogp(double p1, double p2)
-{
-	return plogp(p2) - plogp(p1);
-}
-
 struct DeltaCodeLength
 {
 	int targetModule;
@@ -644,7 +605,7 @@ void get_optimal_community(Community &C, int seed = 1)
 	}
 
 	// iteration
-	int T = N * N; // max iteration counts
+	int T = N; // max iteration counts
 	double total_delta_L = 0;
 	int convergence_counter = 0;
 	for (int t = 0; t < T; t++)
@@ -675,7 +636,7 @@ void get_optimal_community(Community &C, int seed = 1)
 		// at convergence
 		if (N_delta_L < 1e-15)
 		{
-			if (convergence_counter++ > 3)
+			if (++convergence_counter >= 3)
 			{
 				cout << "  total steps to get optimal commmunity: " << t << endl;
 				break;
