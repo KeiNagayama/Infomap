@@ -232,9 +232,9 @@ vector<double> get_pagerank(int N, vector<Link> &nlinks, vector<int> &dangling_n
 	vector<double> pagerank = teleportation_rate;
 	vector<double> pagerank_last = teleportation_rate;
 
-	cout << "  #dangling nodes = " << dangling_nodes.size() << endl;
-	cout << "  teleportation rate = ";
-	print_vector(teleportation_rate);
+	// cout << "  #dangling nodes = " << dangling_nodes.size() << endl;
+	// cout << "  teleportation rate = ";
+	// print_vector(teleportation_rate);
 	cout << endl;
 
 	// iteration by power method
@@ -292,8 +292,8 @@ FlowData get_flowdata(vector<Link> &links, int N)
 	vector<int> dangling_nodes = get_dangling_nodes(outflows);
 	vector<double> teleportation_rate = get_teleportation_rate(outflows, total_outflow);
 	vector<double> pagerank = get_pagerank(N, nlinks, dangling_nodes, teleportation_rate);
-	cout << "  pagerank = ";
-	print_vector(pagerank, '\n');
+	// cout << "  pagerank = ";
+	// print_vector(pagerank, '\n');
 
 	// to calculate final flows
 	vector<Link> linkFlows = nlinks;
@@ -404,16 +404,16 @@ CodeLength get_codelength(int N, vector<Link> &linkFlows, vector<double> &nodeFl
 	// to sum up codeLength
 	double codeLength = moduleCodeLength + sum(indexCodeLength);
 
-	cout << "  indexCodeLength = ";
-	print_vector(indexCodeLength);
-	cout << ", " << sum(indexCodeLength) << endl;
-	cout << "  moduleCodeLength = " << moduleCodeLength << endl;
-	cout << "  nodeFlow = ";
-	print_vector(nodeFlows, '\n');
-	cout << "  exitFlow = ";
-	print_vector(exitFlows, '\n');
-	cout << "  enterFlow = ";
-	print_vector(enterFlows, '\n');
+	// cout << "  indexCodeLength = ";
+	// print_vector(indexCodeLength);
+	// cout << ", " << sum(indexCodeLength) << endl;
+	// cout << "  moduleCodeLength = " << moduleCodeLength << endl;
+	// cout << "  nodeFlow = ";
+	// print_vector(nodeFlows, '\n');
+	// cout << "  exitFlow = ";
+	// print_vector(exitFlows, '\n');
+	// cout << "  enterFlow = ";
+	// print_vector(enterFlows, '\n');
 	// cout << "  linkFlows = " << endl;
 	// print_link(linkFlows);
 
@@ -428,7 +428,7 @@ struct Community
 	vector<vector<int>> community;
 	vector<int> n2c;
 	CodeLength code;
-	// Community() { this->N = 0; };
+	Community() { this->N = 0; };
 	// initialize with all separated partition
 	Community(vector<Link> &weighted_links, double tau) : tau(tau)
 	{
@@ -475,8 +475,9 @@ struct DeltaCodeLength
 	int targetModule;
 	double delta_codeLength;
 	CodeLength new_code;
+	DeltaCodeLength() { this->delta_codeLength = 0; };
 	DeltaCodeLength(int targetModule, double delta_codeLength, CodeLength &new_code)
-		: targetModule(targetModule), delta_codeLength(new_codeLength), new_code(new_code){};
+		: targetModule(targetModule), delta_codeLength(delta_codeLength), new_code(new_code){};
 };
 
 // to calculate delta codelength when moving node gamma from sourceModule to targetModule
@@ -616,16 +617,18 @@ get_deltaCodeLength(Community &C, int gamma, int sourceModule, int targetModule)
 
 	CodeLength new_code = CodeLength(new_codeLength, new_moduleCodeLength, new_indexCodeLength, new_enterFlows, new_exitFlows, new_totalFlows);
 
-	return DeltaCodeLengthData(targetModule, delta_codeLength, new_code);
+	return DeltaCodeLength(targetModule, delta_codeLength, new_code);
 }
 
 // to find a module for a node gamma to move
-DeltaCodeLengthData get_optimal_target_module(Community &C, int gamma, int sourceModule)
+DeltaCodeLength
+get_optimal_target_module(Community &C, int gamma)
 {
-	vector<int> &n2c = C.n2c_;
+	vector<int> &n2c = C.n2c;
+	int sourceModule = n2c[gamma];
 	int opt_targetModule = sourceModule;
 	double opt_delta_L = 0;
-	DeltaCodeLength &opt_deltaCodeLength;
+	DeltaCodeLength opt_deltaCodeLength = DeltaCodeLength();
 
 	for (auto &outflow : C.flowdata.adj_outLinkFlows[gamma])
 	{
@@ -633,7 +636,7 @@ DeltaCodeLengthData get_optimal_target_module(Community &C, int gamma, int sourc
 		if (targetModule == sourceModule)
 			continue;
 		DeltaCodeLength deltaCodeLength = get_deltaCodeLength(C, gamma, sourceModule, targetModule);
-		if (delta_codeLengthData.delta_codeLength > opt_delta_L)
+		if (deltaCodeLength.delta_codeLength > opt_delta_L)
 		{
 			opt_deltaCodeLength = deltaCodeLength;
 		}
@@ -644,8 +647,9 @@ DeltaCodeLengthData get_optimal_target_module(Community &C, int gamma, int sourc
 // to update community assignment after getting module to move gamma to
 // Even if erasing gamma from module i made {}, remain null module i,
 // which is removed in next process (re-indexing)
-void update_community(vector<vector<int>> &community, vector<int> &n2c, int gamma, int sourceModule, int targetModule)
+void update_community(vector<vector<int>> &community, vector<int> &n2c, int gamma, int targetModule)
 {
+	int sourceModule = n2c[gamma];
 	// update community
 	int remove_index = community[sourceModule].size();
 	for (int index = 0; index < community[sourceModule].size(); index++)
@@ -663,7 +667,7 @@ void update_community(vector<vector<int>> &community, vector<int> &n2c, int gamm
 
 // community: return new community
 // n2c: overwrite
-vector<vector<int>> re_index(vector<vector<int>> &community, vector<int> &n2c)
+void re_index(vector<vector<int>> &community, vector<int> &n2c)
 {
 	// get unique community indices
 	vector<int> unq(n2c);
@@ -686,83 +690,72 @@ vector<vector<int>> re_index(vector<vector<int>> &community, vector<int> &n2c)
 	{
 		new_community.push_back(community[i]);
 	}
-	return new_community;
+	community = new_community;
 }
 
 // to find optimal community at each level
-Community get_optimal_community(Community &C, int seed = 1)
+void get_optimal_community(Community &C, int seed = 1)
 {
 	int N = C.N;
-	vector<vector<int>> community = C.community;
-	vector<int> n2c = C.n2c;
+	vector<vector<int>> &community = C.community;
+	vector<int> &n2c = C.n2c;
 
 	// set random generator
 	mt19937 mt(seed);
-	// node indices for shuffling
-	vector<int> nodes(N);
-	for (int alpha = 0; alpha < N; alpha++)
-	{
-		nodes[alpha] = alpha;
-	}
+	uniform_int_distribution<> gen_int(0, N - 1);
 
 	// iteration
-	int T = N; // max iteration counts
+	int T = N * N; // max iteration counts
 	double total_delta_L = 0;
 	int convergence_counter = 0;
 	for (int t = 0; t < T; t++)
 	{
 		// cout << "t = " << t << endl;
-		double all_delta_L = 0;
-		shuffle(nodes.begin(), nodes.end(), mt);
-		for (auto &alpha : nodes)
+		int gamma = gen_int(mt);
+
+		// optimiation
+		DeltaCodeLength opt = get_optimal_target_module(C, gamma);
+		int j = opt.targetModule;
+		double delta_L = opt.delta_codeLength;
+		CodeLength new_code = opt.new_code;
+		// update community assignment and codelength
+		if (delta_L > 0)
 		{
-			// optimiation
-			tuple<int, double, CodeLength> opt = get_optimal_target_module(C, alpha);
-			int j = get<0>(opt);
-			double delta_L = get<1>(opt);
-			CodeLength code = get<2>(opt);
-			// printf("optimization: alpha = %d, j = %d / delta_L = %:.3f\n", alpha, j, delta_L);
-			// update community assignment and codelength
-			if (delta_L > 0)
-			{
-				// printf("optimization: alpha = %d, j = %d / delta_L = %:.3f\n", alpha, j, delta_L);
-				update_community(community, n2c, alpha, j);
-				C.community = community;
-				C.n2c = n2c;
-				C.code = code;
-				// // debug
-				// int precision = 3;
-				// cout << "\e[0;32m  updated community = \e[0m";
-				// print_community(C.community, '\n');
-				// cout << "\e[0;32m  updated qs = \e[0m";
-				// print_vector(C.code.qs_, '\n', precision);
-				// cout << "\e[0;32m  updated ps = \e[0m";
-				// print_vector(C.code.ps_, '\n', precision);
-				// printf("\e[0;32m  L = \e[0m%1.3f\n", C.code.L);
-			}
-			all_delta_L += delta_L;
+			// printf("optimization: gamma = %d, j = %d / delta_L = %:.3f\n", gamma, j, delta_L);
+			update_community(community, n2c, gamma, j);
+			// print_vector(n2c, '\n');
+			// C.community = community;
+			// C.n2c = n2c;
+			C.code = new_code;
+			// // debug
+			// int precision = 3;
+			// cout << "\e[0;32m  updated community = \e[0m";
+			// print_community(C.community, '\n');
+			// cout << "\e[0;32m  updated qs = \e[0m";
+			// print_vector(C.code.qs_, '\n', precision);
+			// cout << "\e[0;32m  updated ps = \e[0m";
+			// print_vector(C.code.ps_, '\n', precision);
+			// printf("\e[0;32m  L = \e[0m%1.3f\n", C.code.L);
 		}
-		total_delta_L += all_delta_L;
+		total_delta_L += delta_L;
 		// at convergence
-		if (all_delta_L == 0)
+		if (total_delta_L < 1e-15)
 		{
-			if (convergence_counter++ > 5)
+			if (convergence_counter++ > N)
 			{
-				// cout << "total steps to get optimal commmunity: " << t << endl;
+				cout << "total steps to get optimal commmunity: " << t << endl;
 				break;
 			}
 		}
 	}
 
 	// re-index community
-	vector<vector<int>> new_community = re_index(community, n2c);
+	re_index(community, n2c);
 	cout << "n2c = ";
 	print_vector(n2c);
 
-	if (total_delta_L > 0)
-		return Community(C.nadj_inflows_, C.nodeFlow, C.tau, new_community, n2c);
-	else
-		return Community();
+	if (total_delta_L < 1e-15)
+		C = Community();
 }
 
 // vector<vector<Flow>> get_agg_outflows(vector<vector<Flow>> &flows, vector<vector<int>> &community, vector<int> &n2c)
@@ -888,7 +881,7 @@ void test_4()
 	// cout << "\e[0;32m  init ps = \e[0m";
 	// print_vector(C.code.ps_, '\n', precision);
 	double L0 = C.code.L;
-	double dL0 = get_deltaCodeLength(C, 3, 3, 2);
+	double dL0 = get_deltaCodeLength(C, 3, 3, 2).delta_codeLength;
 	printf("\e[0;32m  L0 = \e[0m%1.3f\n", -L0);
 	printf("\e[0;32m  dL0 = \e[0m%1.3f\n", dL0);
 	// printf("\e[0;32m  L = \e[0m%1.3f\n", -C.code.L / log(2));
@@ -905,7 +898,7 @@ void test_4()
 	print_community(init_community, '\n');
 	C = Community(links, tau, init_community);
 	double L2 = C.code.L;
-	double dL2 = get_deltaCodeLength(C, 3, 1, 0);
+	double dL2 = get_deltaCodeLength(C, 3, 1, 0).delta_codeLength;
 	printf("\e[0;32m  L2 = \e[0m%1.3f\n", -L2);
 	printf("\e[0;32m  dL2 = \e[0m%1.3f\n", dL2);
 
@@ -919,18 +912,21 @@ void test_4()
 	// ==========================================================
 	// test for get optimal community
 	// ==========================================================
-	// cout << "========================================" << endl;
-	// cout << "test for get optimal community" << endl;
+	cout << "========================================" << endl;
+	cout << "test for get optimal community" << endl;
 
-	// // get optimal community
-	// cout << "========================================" << endl;
-	// cout << "[info]" << endl;
-	// Community opt_C = get_optimal_community(C, seed);
-	// cout << "\e[0;32m  seed = \e[0m" << seed << endl;
-	// cout << "\e[0;32m  detected community = \e[0m";
-	// print_community(opt_C.community, '\n');
-	// cout << "\e[0;32m  L = \e[0m";
-	// printf("%1.3f", -opt_C.code.L);
+	// get optimal community
+	cout << "========================================" << endl;
+	cout << "[info]" << endl;
+
+	init_community = {{0}, {1}, {2}, {3}};
+	Community opt_C = Community(links, tau, init_community);
+	get_optimal_community(opt_C, seed);
+	cout << "\e[0;32m  seed = \e[0m" << seed << endl;
+	cout << "\e[0;32m  detected community = \e[0m";
+	print_community(opt_C.community, '\n');
+	cout << "\e[0;32m  L = \e[0m";
+	printf("%1.3f", -opt_C.code.L);
 
 	// cout << "========================================" << endl;
 	// cout << "test for find multi-level community" << endl;
@@ -944,15 +940,46 @@ void test_4()
 	return;
 }
 
+void test_lfr()
+{
+	string graph_name = "graphs/lfr250.txt";
+	cout << "========================================" << endl;
+	cout << "test for " << graph_name << endl;
+
+	bool directed = false;
+	bool use_weight = false;
+	vector<Link> links = read_links(graph_name, directed, use_weight);
+	int N = get_N(links);
+
+	// vector<vector<Flow>> adj_flows = get_nadj_inflows(links, N);
+	double tau = 0.15;
+	int seed = 4;
+
+	Community opt_C = Community(links, tau);
+	printf(", init L = %1.3f\n", opt_C.code.L / log(2));
+	get_optimal_community(opt_C, seed);
+	printf(", L = %1.3f\n", opt_C.code.L / log(2));
+	print_community(opt_C.community, '\n');
+	cout << "NC = " << opt_C.community.size() << endl;
+
+	// chech correspondence with api
+	// vector<vector<int>> community = {{1, 7, 13, 14, 20, 23, 24, 27, 28, 29, 31, 33, 37, 38, 39, 40, 46, 54, 55, 58, 62, 69, 71, 72, 75, 76, 78, 80, 83, 86, 90, 91, 96, 102, 103, 106, 107, 109, 113, 114, 116, 117, 120, 125, 128, 132, 135, 152, 153, 160, 165, 166, 168, 169, 177, 181, 182, 188, 192, 194, 202, 204, 205, 217, 228, 235, 240, 243, 244, 247, 248, 249}, {0, 2, 3, 4, 5, 6, 9, 10, 11, 15, 17, 25, 26, 30, 32, 35, 36, 41, 42, 43, 44, 45, 47, 48, 49, 50, 51, 52, 53, 56, 57, 59, 60, 63, 64, 66, 67, 68, 73, 74, 77, 79, 81, 82, 85, 87, 88, 89, 92, 93, 94, 95, 97, 98, 99, 100, 101, 104, 105, 108, 110, 111, 112, 115, 118, 119, 121, 122, 123, 124, 126, 127, 129, 131, 133, 134, 136, 137, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 154, 155, 156, 157, 158, 159, 161, 162, 163, 164, 167, 170, 171, 172, 173, 175, 176, 178, 179, 184, 185, 187, 189, 190, 191, 193, 195, 196, 197, 198, 199, 200, 201, 203, 206, 207, 208, 210, 212, 213, 214, 215, 216, 218, 219, 220, 221, 222, 223, 224, 225, 226, 229, 230, 231, 232, 233, 234, 236, 237, 238, 239, 241, 242, 245, 246}, {8, 12, 16, 18, 19, 21, 22, 34, 61, 65, 70, 84, 130, 138, 174, 180, 183, 186, 209, 211, 227}};
+
+	// Community C = Community(links, tau, community);
+	// cout << "n2c = ";
+	// print_vector(C.n2c);
+	// printf(", ground L = %1.3f\n", C.code.L / log(2));
+}
+
 int main(int argc, char *argv[])
 {
 	// test_L();
 	// test_3(); // all test passed!! (for one-layer search)
-	test_4();
+	// test_4();
 	// test_27();
 	// test_3_1();
 	// test_97();
-	// test_lfr();
+	test_lfr();
 	// test_entropy();
 	// test_plogp();
 	return 0;
