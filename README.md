@@ -75,7 +75,6 @@ struct Community
 	int N;
 	FlowData flowdata;
 	double tau;
-	vector<vector<int>> community;
 	vector<int> n2c; // community indices for each node
 	CodeLength code;
 };
@@ -107,6 +106,8 @@ struct DeltaCodeLength
 1. 全ノードをシャッフルし，各 1 回ずつ最適ノードを探索する．
 2. 1 を 3 回行って更新がなければ収束したものとみなす．
 3. 1 の最大反復数はノード数 N とした．
+
+4. NC の更新は reindex のときのみ
 
 ### Aggregation
 
